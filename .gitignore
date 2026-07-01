@@ -1,0 +1,36 @@
+# --- Sistema de orquestación interna (no publicar) ---
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+directives/
+execution/
+memory/
+.claude/
+.tmp/
+.codegraph/
+.slurp/
+.mcp.json
+
+# --- Secretos ---
+.env
+credentials.json
+token.json
+
+# --- Entregables locales (las releases se publican via Actions) ---
+entregables/
+
+# --- Node / Electron ---
+node_modules/
+desktop/dist/
+
+# --- Android / Gradle ---
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+*.iml
+.idea/
+
+# --- Sistema ---
+Thumbs.db
+Desktop.ini
