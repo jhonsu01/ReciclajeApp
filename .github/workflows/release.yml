@@ -1,0 +1,96 @@
+# Publica una Release de GitHub con el MSI (Windows) y el APK (Android) adjuntos.
+#
+# Se dispara de dos formas:
+#   1. Automática: al hacer push de un tag "v*" (ej: v0.1.0)
+#   2. Manual: pestaña Actions -> Release -> "Run workflow" indicando el tag
+#      (útil si GitHub Desktop no subió el tag; la release crea el tag sobre el commit actual)
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de la release (ej: v0.1.0)"
+        required: true
+        default: "v0.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-msi:
+    name: Instalador Windows (MSI)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: desktop
+        run: npm ci
+
+      - name: Compilar MSI
+        working-directory: desktop
+        run: npx electron-builder --win msi --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msi
+          path: desktop/dist/*.msi
+          if-no-files-found: error
+
+  build-apk:
+    name: Aplicación Android (APK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Compilar APK release
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Renombrar APK con versión
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          cp android/app/build/outputs/apk/release/app-release.apk "ReciclajeTurnero-${TAG}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: ReciclajeTurnero-*.apk
+          if-no-files-found: error
+
+  release:
+    name: Publicar Release
+    needs: [build-msi, build-apk]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: artefactos
+
+      - name: Crear Release con artefactos
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Reciclaje Turnero ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artefactos/*.msi
+            artefactos/*.apk
