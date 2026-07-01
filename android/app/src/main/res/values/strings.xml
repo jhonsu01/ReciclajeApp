@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Reciclaje Turnero</string>
+    <string name="titulo_config">Conectar con el centro de reciclaje</string>
+    <string name="hint_servidor">IP del servidor (ej: 192.168.0.10)</string>
+    <string name="hint_puerto">Puerto (ej: 3000)</string>
+    <string name="hint_pin">PIN de emparejamiento</string>
+    <string name="btn_conectar">Conectar</string>
+    <string name="titulo_registro">Solicitar turno</string>
+    <string name="hint_documento">Número de documento</string>
+    <string name="btn_solicitar">Solicitar turno</string>
+    <string name="titulo_turno">Tu turno</string>
+    <string name="btn_nuevo_turno">Solicitar nuevo turno</string>
+    <string name="btn_cambiar_servidor">Cambiar servidor</string>
+    <string name="material_opcional">Material a entregar (opcional)</string>
+    <string name="sin_material">— Sin declarar —</string>
+</resources>

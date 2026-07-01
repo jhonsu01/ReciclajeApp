@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fondo">#0D0D0D</color>
+    <color name="panel">#1A1A1A</color>
+    <color name="texto">#F2F2F2</color>
+    <color name="verde">#22C55E</color>
+    <color name="verde_oscuro">#166534</color>
+    <color name="amarillo">#FACC15</color>
+    <color name="rojo">#EF4444</color>
+    <color name="gris">#9CA3AF</color>
+</resources>
