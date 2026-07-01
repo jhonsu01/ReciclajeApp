@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de Administración — Reciclaje Turnero</title>
+<style>
+  :root {
+    --bg: #F4F6F5; --panel: #FFFFFF; --texto: #1A1A1A; --borde: #E2E6E4;
+    --primario: #16A34A; --amarillo: #CA8A04; --rojo: #DC2626; --gris: #6B7280;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+  body { background: var(--bg); color: var(--texto); }
+  header {
+    background: #14532D; color: white; padding: .9rem 1.5rem;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem;
+  }
+  header h1 { font-size: 1.25rem; }
+  .conexion { font-size: .9rem; background: rgba(255,255,255,.12); padding: .4rem .8rem; border-radius: 6px; }
+  .conexion b { color: #86EFAC; }
+  nav { display: flex; gap: .25rem; background: var(--panel); border-bottom: 1px solid var(--borde); padding: 0 1rem; }
+  nav button {
+    border: none; background: none; padding: .85rem 1.2rem; cursor: pointer;
+    font-size: .95rem; color: var(--gris); border-bottom: 3px solid transparent;
+  }
+  nav button.activo { color: var(--primario); border-bottom-color: var(--primario); font-weight: 600; }
+  main { padding: 1.25rem; max-width: 1200px; margin: 0 auto; }
+  .tab { display: none; }
+  .tab.activo { display: block; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+  th, td { padding: .65rem .8rem; text-align: left; border-bottom: 1px solid var(--borde); font-size: .92rem; }
+  th { background: #F0FDF4; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: #166534; }
+  .badge { padding: .2rem .6rem; border-radius: 99px; font-size: .75rem; font-weight: 700; }
+  .ESPERANDO { background: #DCFCE7; color: #166534; }
+  .LLAMADO { background: #FEF9C3; color: #854D0E; }
+  .EN_PESAJE { background: #FEF3C7; color: #92400E; }
+  .FINALIZADO { background: #E5E7EB; color: #374151; }
+  .NO_PRESENTADO { background: #FEE2E2; color: #991B1B; }
+  button.accion {
+    border: 1px solid var(--borde); background: var(--panel); border-radius: 6px;
+    padding: .35rem .7rem; margin: 0 .15rem; cursor: pointer; font-size: .82rem;
+  }
+  button.accion:hover { background: #F0FDF4; border-color: var(--primario); }
+  button.primario { background: var(--primario); color: white; border: none; }
+  button.primario:hover { background: #15803D; }
+  button.peligro { color: var(--rojo); }
+  input, select {
+    padding: .5rem .6rem; border: 1px solid var(--borde); border-radius: 6px; font-size: .95rem; width: 100%;
+  }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; max-width: 760px; }
+  .campo label { display: block; font-size: .82rem; color: var(--gris); margin-bottom: .3rem; }
+  .card { background: var(--panel); border-radius: 10px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,.07); margin-bottom: 1rem; }
+  .modal-fondo {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    align-items: center; justify-content: center; z-index: 10;
+  }
+  .modal-fondo.abierto { display: flex; }
+  .modal { background: white; border-radius: 12px; padding: 1.5rem; width: min(560px, 92vw); max-height: 88vh; overflow: auto; }
+  .modal h3 { margin-bottom: 1rem; }
+  .total { font-size: 1.5rem; font-weight: 800; color: var(--primario); }
+  .fila-acciones { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1.2rem; }
+  .num { font-variant-numeric: tabular-nums; }
+  input.precio { width: 110px; }
+  .hint { font-size: .8rem; color: var(--gris); margin-top: .4rem; }
+  pre.recibo { background: #F9FAFB; border: 1px solid var(--borde); border-radius: 8px; padding: 1rem; font-size: .8rem; overflow: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>♻ Reciclaje Turnero — Administración</h1>
+  <div class="conexion" id="conexion">Cargando conexión…</div>
+</header>
+<nav>
+  <button data-tab="turnos" class="activo">Turnos</button>
+  <button data-tab="materiales">Materiales y precios</button>
+  <button data-tab="config">Configuración</button>
+</nav>
+<main>
+  <div class="tab activo" id="tab-turnos">
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;">
+      <div>
+        <b>Turnos de hoy</b>
+        <div class="hint">La pantalla del turnero está en <a href="/display.html" target="_blank">/display.html</a> (ábrela en las pantallas informativas).</div>
+      </div>
+      <button class="accion primario" onclick="abrirNuevoTurno()">+ Registrar turno manual</button>
+    </div>
+    <table>
+      <thead><tr><th>Turno</th><th>Documento</th><th>Material declarado</th><th>Estado</th><th>Módulo</th><th>Acciones</th></tr></thead>
+      <tbody id="cuerpo-turnos"><tr><td colspan="6">Cargando…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="tab" id="tab-materiales">
+    <div class="card"><b>Precios por kg</b>
+      <div class="hint">Precios referenciales Mayo 2025 — edítalos según tu región y guarda cada fila.</div>
+    </div>
+    <table>
+      <thead><tr><th>Familia</th><th>Subcategoría</th><th>Presentación</th><th>Promedio</th><th>Mín</th><th>Máx</th><th></th></tr></thead>
+      <tbody id="cuerpo-materiales"></tbody>
+    </table>
+  </div>
+
+  <div class="tab" id="tab-config">
+    <div class="card">
+      <b>Configuración del servidor</b>
+      <div class="form-grid" style="margin-top:1rem;">
+        <div class="campo"><label>Nombre del centro</label><input id="cfg-nombre"></div>
+        <div class="campo"><label>PIN de emparejamiento (app móvil)</label><input id="cfg-pin" maxlength="8"></div>
+        <div class="campo"><label>Timeout de ausencia (minutos)</label><input id="cfg-timeout" type="number" min="1"></div>
+        <div class="campo"><label>Número de módulos</label><input id="cfg-modulos" type="number" min="1" max="20"></div>
+      </div>
+      <div class="fila-acciones"><button class="accion primario" onclick="guardarConfig()">Guardar configuración</button></div>
+    </div>
+    <div class="card">
+      <b>Conexión de la app Android</b>
+      <p class="hint" id="instrucciones-app">…</p>
+    </div>
+  </div>
+</main>
+
+<!-- Modal pesaje -->
+<div class="modal-fondo" id="modal-pesaje">
+  <div class="modal">
+    <h3>Pesaje — Turno <span id="pesaje-turno-num" class="num"></span></h3>
+    <div class="form-grid">
+      <div class="campo"><label>Material</label><select id="pesaje-material"></select></div>
+      <div class="campo"><label>Peso (kg)</label><input id="pesaje-kg" type="number" step="0.01" min="0.01"></div>
+    </div>
+    <p class="hint">Valor estimado: <b id="pesaje-valor" class="num">$0</b></p>
+    <div class="fila-acciones">
+      <button class="accion" onclick="cerrarModal('modal-pesaje')">Cerrar</button>
+      <button class="accion" onclick="registrarPesaje()">Agregar pesaje</button>
+      <button class="accion primario" onclick="finalizarTurno()">Finalizar y generar recibo</button>
+    </div>
+    <h4 style="margin-top:1.2rem;">Pesajes registrados</h4>
+    <table style="margin-top:.5rem;">
+      <thead><tr><th>Material</th><th>Kg</th><th>$/kg</th><th>Total</th></tr></thead>
+      <tbody id="pesaje-lista"></tbody>
+    </table>
+    <p style="margin-top:.8rem;">Total acumulado: <span class="total num" id="pesaje-total">$0</span></p>
+  </div>
+</div>
+
+<!-- Modal recibo -->
+<div class="modal-fondo" id="modal-recibo">
+  <div class="modal">
+    <h3>Recibo generado ✓</h3>
+    <pre class="recibo" id="recibo-json"></pre>
+    <div class="fila-acciones"><button class="accion primario" onclick="cerrarModal('modal-recibo')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal nuevo turno -->
+<div class="modal-fondo" id="modal-nuevo">
+  <div class="modal">
+    <h3>Registrar turno manual</h3>
+    <div class="form-grid">
+      <div class="campo"><label>Tipo de documento</label>
+        <select id="nuevo-tipo"><option>CC</option><option>CE</option><option>NIT</option><option>PASAPORTE</option><option>TI</option></select>
+      </div>
+      <div class="campo"><label>Número de documento</label><input id="nuevo-doc"></div>
+      <div class="campo"><label>Material (opcional)</label><select id="nuevo-material"><option value="">— Sin declarar —</option></select></div>
+    </div>
+    <div class="fila-acciones">
+      <button class="accion" onclick="cerrarModal('modal-nuevo')">Cancelar</button>
+      <button class="accion primario" onclick="crearTurnoManual()">Crear turno</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => '$' + Number(n).toLocaleString('es-CO');
+const pad = n => String(n).padStart(3, '0');
+let materiales = [];
+let turnoPesajeId = null;
+let config = {};
+
+async function api(ruta, opts = {}) {
+  const r = await fetch(ruta, { headers: { 'Content-Type': 'application/json' }, ...opts });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(data.error || `Error ${r.status}`); throw new Error(data.error || r.status); }
+  return data;
+}
+
+// ---- Tabs ----
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.remove('activo'));
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('activo'));
+  b.classList.add('activo');
+  $('tab-' + b.dataset.tab).classList.add('activo');
+});
+
+// ---- Turnos ----
+async function cargarTurnos() {
+  const turnos = await api('/api/turnos');
+  $('cuerpo-turnos').innerHTML = turnos.length ? turnos.map(t => {
+    const mat = t.familia ? `${t.familia} / ${t.subcategoria}` : '—';
+    const acciones = [];
+    if (t.estado === 'ESPERANDO' || t.estado === 'NO_PRESENTADO')
+      acciones.push(`<button class="accion primario" onclick="llamar(${t.id})">Llamar</button>`);
+    if (t.estado === 'LLAMADO' || t.estado === 'EN_PESAJE')
+      acciones.push(`<button class="accion" onclick="abrirPesaje(${t.id}, ${t.numero})">Pesaje</button>`);
+    if (t.estado === 'LLAMADO')
+      acciones.push(`<button class="accion peligro" onclick="noPresentado(${t.id})">No presentado</button>`);
+    if (t.estado === 'FINALIZADO')
+      acciones.push(`<button class="accion" onclick="verRecibo(${t.id})">Ver recibo</button>`);
+    return `<tr>
+      <td class="num"><b>${pad(t.numero)}</b></td>
+      <td>${t.tipo_documento} ${t.numero_documento}</td>
+      <td>${mat}</td>
+      <td><span class="badge ${t.estado}">${t.estado.replace('_', ' ')}</span></td>
+      <td class="num">${t.modulo_asignado ?? '—'}</td>
+      <td>${acciones.join('')}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6">No hay turnos registrados hoy.</td></tr>';
+}
+
+async function llamar(id) {
+  const max = Number(config.num_modulos) || 3;
+  const mod = prompt(`¿A qué módulo? (1-${max})`, '1');
+  if (mod === null) return;
+  const m = Number(mod);
+  if (!(m >= 1 && m <= max)) return alert(`Módulo inválido (1-${max})`);
+  await api(`/api/turnos/${id}/estado`, { method: 'PUT', body: JSON.stringify({ estado: 'LLAMADO', modulo_asignado: m }) });
+}
+
+async function noPresentado(id) {
+  if (!confirm('¿Marcar como NO PRESENTADO?')) return;
+  await api(`/api/turnos/${id}/estado`, { method: 'PUT', body: JSON.stringify({ estado: 'NO_PRESENTADO' }) });
+}
+
+// ---- Pesaje ----
+async function abrirPesaje(id, numero) {
+  turnoPesajeId = id;
+  $('pesaje-turno-num').textContent = pad(numero);
+  $('pesaje-material').innerHTML = materiales.map(m =>
+    `<option value="${m.id}" data-precio="${m.precio_promedio}">${m.familia} / ${m.subcategoria} (${m.presentacion}) — ${fmt(m.precio_promedio)}/kg</option>`).join('');
+  $('pesaje-kg').value = '';
+  actualizarValor();
+  await refrescarPesajes();
+  $('modal-pesaje').classList.add('abierto');
+}
+
+function actualizarValor() {
+  const opt = $('pesaje-material').selectedOptions[0];
+  const precio = opt ? Number(opt.dataset.precio) : 0;
+  const kg = Number($('pesaje-kg').value) || 0;
+  $('pesaje-valor').textContent = fmt(Math.round(precio * kg));
+}
+$('pesaje-kg').addEventListener('input', actualizarValor);
+$('pesaje-material').addEventListener('change', actualizarValor);
+
+async function refrescarPesajes() {
+  const pesajes = await api(`/api/pesajes/${turnoPesajeId}`);
+  $('pesaje-lista').innerHTML = pesajes.map(p =>
+    `<tr><td>${p.familia} / ${p.subcategoria}</td><td class="num">${p.peso_kg}</td>
+     <td class="num">${fmt(p.precio_kg)}</td><td class="num">${fmt(p.valor_total)}</td></tr>`).join('')
+    || '<tr><td colspan="4">Sin pesajes aún.</td></tr>';
+  $('pesaje-total').textContent = fmt(pesajes.reduce((s, p) => s + p.valor_total, 0));
+}
+
+async function registrarPesaje() {
+  const kg = Number($('pesaje-kg').value);
+  if (!(kg > 0)) return alert('Ingresa un peso válido en kg');
+  await api('/api/pesaje', {
+    method: 'POST',
+    body: JSON.stringify({ turno_id: turnoPesajeId, material_id: Number($('pesaje-material').value), peso_kg: kg }),
+  });
+  $('pesaje-kg').value = '';
+  actualizarValor();
+  await refrescarPesajes();
+}
+
+async function finalizarTurno() {
+  const recibo = await api(`/api/turnos/${turnoPesajeId}/finalizar`, { method: 'POST' });
+  cerrarModal('modal-pesaje');
+  $('recibo-json').textContent = JSON.stringify(recibo, null, 2);
+  $('modal-recibo').classList.add('abierto');
+}
+
+async function verRecibo(id) {
+  const recibo = await api(`/api/recibos/${id}`);
+  $('recibo-json').textContent = JSON.stringify(recibo, null, 2);
+  $('modal-recibo').classList.add('abierto');
+}
+
+// ---- Nuevo turno manual ----
+function abrirNuevoTurno() {
+  $('nuevo-material').innerHTML = '<option value="">— Sin declarar —</option>' +
+    materiales.map(m => `<option value="${m.id}">${m.familia} / ${m.subcategoria} (${m.presentacion})</option>`).join('');
+  $('modal-nuevo').classList.add('abierto');
+}
+
+async function crearTurnoManual() {
+  const body = {
+    tipo_documento: $('nuevo-tipo').value,
+    numero_documento: $('nuevo-doc').value.trim(),
+    material_id: $('nuevo-material').value || null,
+  };
+  await api('/api/turnos', { method: 'POST', body: JSON.stringify(body) });
+  cerrarModal('modal-nuevo');
+}
+
+// ---- Materiales ----
+async function cargarMateriales() {
+  materiales = await api('/api/materiales');
+  $('cuerpo-materiales').innerHTML = materiales.map(m => `<tr>
+    <td>${m.familia}</td><td>${m.subcategoria}</td><td>${m.presentacion}</td>
+    <td><input class="precio num" type="number" id="mp-${m.id}" value="${m.precio_promedio}"></td>
+    <td><input class="precio num" type="number" id="mn-${m.id}" value="${m.precio_min}"></td>
+    <td><input class="precio num" type="number" id="mx-${m.id}" value="${m.precio_max}"></td>
+    <td><button class="accion primario" onclick="guardarMaterial(${m.id})">Guardar</button></td>
+  </tr>`).join('');
+}
+
+async function guardarMaterial(id) {
+  await api(`/api/materiales/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      precio_promedio: Number($(`mp-${id}`).value),
+      precio_min: Number($(`mn-${id}`).value),
+      precio_max: Number($(`mx-${id}`).value),
+    }),
+  });
+}
+
+// ---- Config ----
+async function cargarConfig() {
+  config = await api('/api/config');
+  $('cfg-nombre').value = config.nombre_centro || '';
+  $('cfg-pin').value = config.pin_emparejamiento || '';
+  $('cfg-timeout').value = config.timeout_minutos || 5;
+  $('cfg-modulos').value = config.num_modulos || 3;
+  $('conexion').innerHTML =
+    `Servidor: <b>http://${config.ip}:${config.puerto}</b> &nbsp;|&nbsp; PIN app: <b>${config.pin_emparejamiento}</b>`;
+  $('instrucciones-app').innerHTML =
+    `En la app Android ingresa el servidor <b>${config.ip}</b>, puerto <b>${config.puerto}</b> y el PIN <b>${config.pin_emparejamiento}</b>. ` +
+    `El teléfono debe estar en la misma red WiFi (o conectado al hotspot de este equipo).`;
+}
+
+async function guardarConfig() {
+  await api('/api/config', {
+    method: 'PUT',
+    body: JSON.stringify({
+      nombre_centro: $('cfg-nombre').value.trim(),
+      pin_emparejamiento: $('cfg-pin').value.trim(),
+      timeout_minutos: Number($('cfg-timeout').value) || 5,
+      num_modulos: Number($('cfg-modulos').value) || 3,
+    }),
+  });
+  await cargarConfig();
+  alert('Configuración guardada.');
+}
+
+function cerrarModal(id) { $(id).classList.remove('abierto'); cargarTurnos(); }
+
+// ---- WebSocket ----
+function conectarWS() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = ev => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'turnos_updated') cargarTurnos();
+    if (msg.type === 'materiales_updated') cargarMateriales();
+  };
+  ws.onclose = () => setTimeout(conectarWS, 3000);
+}
+
+cargarConfig(); cargarMateriales(); cargarTurnos(); conectarWS();
+setInterval(cargarTurnos, 20000);
+</script>
+</body>
+</html>

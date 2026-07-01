@@ -1,0 +1,44 @@
+{
+  "name": "reciclaje-turnero-desktop",
+  "productName": "Reciclaje Turnero",
+  "version": "0.1.0",
+  "description": "Servidor local + panel de administración del sistema de gestión de reciclaje con turnero inteligente",
+  "main": "src/main.js",
+  "author": "Jhon Supelano",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win msi --publish never"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "sql.js": "^1.13.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.reciclaje.turnero",
+    "productName": "Reciclaje Turnero",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "public/**/*"
+    ],
+    "win": {
+      "target": [
+        "msi"
+      ]
+    },
+    "msi": {
+      "oneClick": false,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "artifactName": "ReciclajeTurnero-${version}.msi"
+    }
+  }
+}
