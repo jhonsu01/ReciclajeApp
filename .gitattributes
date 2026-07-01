@@ -1,0 +1,14 @@
+# Normalización de finales de línea
+* text=auto
+
+# Scripts que DEBEN conservar su EOL específico
+android/gradlew text eol=lf
+*.bat text eol=crlf
+*.sh text eol=lf
+
+# Binarios
+*.jar binary
+*.keystore binary
+*.ico binary
+*.png binary
+*.wasm binary
