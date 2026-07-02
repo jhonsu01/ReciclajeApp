@@ -215,6 +215,15 @@
                 android:text="@string/btn_solicitar" />
 
             <Button
+                android:id="@+id/btnHistorial"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="@color/verde_oscuro"
+                android:textColor="@color/texto"
+                android:text="@string/btn_historial" />
+
+            <Button
                 android:id="@+id/btnCambiarServidor"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

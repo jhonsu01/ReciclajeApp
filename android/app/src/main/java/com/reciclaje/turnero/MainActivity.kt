@@ -70,12 +70,8 @@ class MainActivity : AppCompatActivity() {
 
         // Cliente
         findViewById<Button>(R.id.btnSolicitar).setOnClickListener { solicitarTurno() }
-        findViewById<Button>(R.id.btnNuevoTurno).setOnClickListener {
-            turnoActivo = -1
-            prefs.edit().remove("turno_id").apply()
-            mostrarVista(R.id.vistaRegistro)
-            cargarMateriales(R.id.spinnerMaterial, conVacio = true)
-        }
+        findViewById<Button>(R.id.btnHistorial).setOnClickListener { mostrarHistorial() }
+        findViewById<Button>(R.id.btnNuevoTurno).setOnClickListener { limpiarTurnoCliente() }
 
         // Pesaje
         findViewById<Button>(R.id.btnAgregarPesaje).setOnClickListener { registrarPesaje() }
@@ -157,23 +153,51 @@ class MainActivity : AppCompatActivity() {
             return
         }
         rolElegido = rol
-        api = ApiClient(host, prefs.getInt("puerto", 3000), prefs.getString("pin", "") ?: "")
+        val cliente = ApiClient(host, prefs.getInt("puerto", 3000), prefs.getString("token", "") ?: "")
+        api = cliente
         estadoConexion("Servidor: $host:${prefs.getInt("puerto", 3000)} · rol: $rol")
-        when (rol) {
-            "kiosko" -> { startActivity(Intent(this, KioskActivity::class.java)) }
-            "cliente" -> {
-                val turnoGuardado = prefs.getLong("turno_id", -1)
-                if (turnoGuardado > 0) {
-                    turnoActivo = turnoGuardado
-                    mostrarVista(R.id.vistaTurno)
-                    iniciarPeriodica(3000) { consultarTurno() }
-                } else {
-                    mostrarVista(R.id.vistaRegistro)
-                    cargarMateriales(R.id.spinnerMaterial, conVacio = true)
+
+        // Roles elevados: verificar que el acceso no haya sido revocado desde el panel
+        if (rol in listOf("pesaje", "admin", "kiosko")) {
+            io.execute {
+                try {
+                    val info = cliente.ping()
+                    val vigente = info.optString("rol") == rol || info.optString("rol") == "admin"
+                    ui.post {
+                        if (!vigente) {
+                            toast("El acceso de este dispositivo fue revocado")
+                            cambiarRol()
+                        } else {
+                            when (rol) {
+                                "kiosko" -> startActivity(Intent(this, KioskActivity::class.java))
+                                "pesaje" -> entrarPesaje()
+                                "admin" -> entrarAdmin()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Sin red por ahora: entrar igual, las llamadas reintentarán
+                    ui.post {
+                        when (rol) {
+                            "kiosko" -> startActivity(Intent(this, KioskActivity::class.java))
+                            "pesaje" -> entrarPesaje()
+                            "admin" -> entrarAdmin()
+                        }
+                    }
                 }
             }
-            "pesaje" -> entrarPesaje()
-            "admin" -> entrarAdmin()
+            return
+        }
+
+        // Cliente
+        val turnoGuardado = prefs.getLong("turno_id", -1)
+        if (turnoGuardado > 0) {
+            turnoActivo = turnoGuardado
+            mostrarVista(R.id.vistaTurno)
+            iniciarPeriodica(3000) { consultarTurno() }
+        } else {
+            mostrarVista(R.id.vistaRegistro)
+            cargarMateriales(R.id.spinnerMaterial, conVacio = true)
         }
     }
 
@@ -181,12 +205,15 @@ class MainActivity : AppCompatActivity() {
     private fun elegirRol(rol: String) {
         rolElegido = rol
         mostrarVista(R.id.vistaConfig)
+        // El cliente no necesita PIN; los roles elevados usan el PIN de sesión del panel
         findViewById<EditText>(R.id.inputPin).visibility =
-            if (rol == "kiosko") View.GONE else View.VISIBLE
+            if (rol == "cliente") View.GONE else View.VISIBLE
+        findViewById<EditText>(R.id.inputPin).setText("")
         findViewById<EditText>(R.id.inputPin).hint = when (rol) {
-            "pesaje" -> "PIN de pesaje"
-            "admin" -> "PIN de administrador"
-            else -> "PIN de cliente"
+            "pesaje" -> "PIN de sesión — Pesaje (ver panel del PC)"
+            "admin" -> "PIN de sesión — Administrador (ver panel del PC)"
+            "kiosko" -> "PIN de sesión — Kiosko (ver panel del PC)"
+            else -> ""
         }
         buscarServidor()
     }
@@ -202,8 +229,8 @@ class MainActivity : AppCompatActivity() {
                     findViewById<EditText>(R.id.inputServidor).setText(servidor.optString("ip"))
                     findViewById<EditText>(R.id.inputPuerto).setText(servidor.optInt("puerto", 3000).toString())
                     txt.text = "✅ Encontrado: ${servidor.optString("nombre")} (${servidor.optString("ip")})"
-                    // El kiosko no necesita PIN: conectar de una vez
-                    if (rolElegido == "kiosko") conectar()
+                    // El cliente no necesita PIN: conectar de una vez
+                    if (rolElegido == "cliente") conectar()
                 } else {
                     txt.text = "⚠ No se encontró el servidor automáticamente. " +
                         "Verifica que el equipo con Reciclaje Turnero esté encendido en la misma red WiFi, " +
@@ -219,40 +246,45 @@ class MainActivity : AppCompatActivity() {
         val pin = findViewById<EditText>(R.id.inputPin).text.toString().trim()
         val rol = rolElegido ?: return
         if (host.isEmpty()) { toast("No hay servidor. Usa la búsqueda o ingresa la IP."); return }
-        if (rol != "kiosko" && pin.isEmpty()) { toast("Ingresa el PIN de tu rol"); return }
+        if (rol != "cliente" && pin.isEmpty()) { toast("Ingresa el PIN de sesión que muestra el panel del PC"); return }
 
-        val cliente = ApiClient(host, puerto, pin)
         estadoConexion("Conectando…")
         io.execute {
             try {
-                val info = cliente.ping()
-                val rolServidor = info.optString("rol", "kiosko")
-                val autorizado = when (rol) {
-                    "kiosko" -> true
-                    "admin" -> rolServidor == "admin"
-                    "pesaje" -> rolServidor == "pesaje" || rolServidor == "admin"
-                    else -> rolServidor != "kiosko"
-                }
-                ui.post {
-                    if (!autorizado) {
-                        estadoConexion("PIN incorrecto para el rol seleccionado")
-                        toast("Ese PIN no corresponde al rol elegido")
-                        return@post
+                if (rol == "cliente") {
+                    // El cliente conecta sin PIN: se identifica con su documento
+                    val cliente = ApiClient(host, puerto)
+                    val info = cliente.ping()
+                    ui.post {
+                        api = cliente
+                        prefs.edit().putString("host", host).putInt("puerto", puerto)
+                            .remove("token").putString("rol", rol).apply()
+                        estadoConexion("Conectado a ${info.optString("nombre", "servidor")} · rol: cliente")
+                        mostrarVista(R.id.vistaRegistro)
+                        cargarMateriales(R.id.spinnerMaterial, conVacio = true)
                     }
-                    api = cliente
+                    return@execute
+                }
+                // Roles elevados: PIN de sesión -> token persistente del dispositivo
+                val resultado = ApiClient(host, puerto)
+                    .emparejar(rol, pin, "${Build.MANUFACTURER} ${Build.MODEL}")
+                val token = resultado.getString("token")
+                ui.post {
+                    api = ApiClient(host, puerto, token)
                     prefs.edit().putString("host", host).putInt("puerto", puerto)
-                        .putString("pin", pin).putString("rol", rol).apply()
-                    estadoConexion("Conectado a ${info.optString("nombre", "servidor")} · rol: $rol")
-                    toast("Emparejamiento exitoso ✓")
+                        .putString("token", token).putString("rol", rol).apply()
+                    estadoConexion("Conectado a ${resultado.optString("nombre_centro", "servidor")} · rol: $rol")
+                    toast("Dispositivo emparejado ✓")
                     when (rol) {
                         "kiosko" -> startActivity(Intent(this, KioskActivity::class.java))
-                        "cliente" -> {
-                            mostrarVista(R.id.vistaRegistro)
-                            cargarMateriales(R.id.spinnerMaterial, conVacio = true)
-                        }
                         "pesaje" -> entrarPesaje()
                         "admin" -> entrarAdmin()
                     }
+                }
+            } catch (e: ApiException) {
+                ui.post {
+                    estadoConexion("Emparejamiento rechazado")
+                    toast(e.message ?: "PIN de sesión incorrecto")
                 }
             } catch (e: Exception) {
                 ui.post {
@@ -311,6 +343,9 @@ class MainActivity : AppCompatActivity() {
                 ui.post {
                     prefs.edit().remove("pendiente").putLong("turno_id", turno.getLong("id")).apply()
                     turnoActivo = turno.getLong("id")
+                    estadoAnterior = null
+                    findViewById<TextView>(R.id.txtRecibo).visibility = View.GONE
+                    findViewById<Button>(R.id.btnNuevoTurno).visibility = View.GONE
                     mostrarVista(R.id.vistaTurno)
                     pintarTurno(turno)
                     iniciarPeriodica(3000) { consultarTurno() }
@@ -374,30 +409,39 @@ class MainActivity : AppCompatActivity() {
                 txtModulo.text = "Módulo ${modulo ?: "-"}"
             }
             "FINALIZADO" -> {
-                txtEstado.text = "FINALIZADO ✓"
-                txtEstado.setTextColor(getColor(R.color.verde))
-                txtModulo.text = ""
-                btnNuevo.visibility = View.VISIBLE
-                if (estadoAnterior != "FINALIZADO") cargarReciboCliente()
-                detenerPeriodica()
+                txtEstado.text = "ESPERANDO PAGO 💵"
+                txtEstado.setTextColor(getColor(R.color.amarillo))
+                txtModulo.text = "Acércate a la caja para recibir tu dinero"
+                // El turno permanece en pantalla hasta que se autorice el desembolso
+                if (estadoAnterior != "FINALIZADO") {
+                    iniciarPeriodica(4000) { verificarPago() }
+                }
             }
             "NO_PRESENTADO" -> {
                 txtEstado.text = "NO PRESENTADO"
                 txtEstado.setTextColor(getColor(R.color.rojo))
                 txtModulo.text = "Solicita un nuevo turno"
+                btnNuevo.text = getString(R.string.btn_nuevo_turno)
                 btnNuevo.visibility = View.VISIBLE
                 txtRecibo.visibility = View.GONE
                 detenerPeriodica()
             }
         }
         estadoAnterior = estado
+        // Los estados activos no muestran recibos ni botones de turnos anteriores
+        if (estado == "ESPERANDO" || estado == "LLAMADO" || estado == "EN_PESAJE") {
+            btnNuevo.visibility = View.GONE
+            txtRecibo.visibility = View.GONE
+        }
 
         findViewById<TextView>(R.id.txtPinTurno).text = "PIN del turno: ${t.getString("codigo_pin")}"
         findViewById<ImageView>(R.id.imgQr).setImageBitmap(generarQr(t.getString("qr_code")))
     }
 
-    private fun cargarReciboCliente() {
+    /** Tras FINALIZADO: muestra el recibo y espera el desembolso para notificar y limpiar. */
+    private fun verificarPago() {
         val cliente = api ?: return
+        if (turnoActivo <= 0) return
         io.execute {
             try {
                 val r = cliente.recibo(turnoActivo) ?: return@execute
@@ -405,8 +449,79 @@ class MainActivity : AppCompatActivity() {
                     val txt = findViewById<TextView>(R.id.txtRecibo)
                     txt.text = textoRecibo(r)
                     txt.visibility = View.VISIBLE
+                    if (r.optBoolean("pagado")) {
+                        detenerPeriodica()
+                        notificarPago(r)
+                    }
                 }
-            } catch (e: Exception) { /* aún no disponible */ }
+            } catch (e: Exception) { /* siguiente intento */ }
+        }
+    }
+
+    private fun notificarPago(r: JSONObject) {
+        vibrar()
+        val txtEstado = findViewById<TextView>(R.id.txtEstadoTurno)
+        txtEstado.text = "PAGADO ✓"
+        txtEstado.setTextColor(getColor(R.color.verde))
+        findViewById<TextView>(R.id.txtModulo).text = ""
+        val btnNuevo = findViewById<Button>(R.id.btnNuevoTurno)
+        btnNuevo.text = "Terminar"
+        btnNuevo.visibility = View.VISIBLE
+        AlertDialog.Builder(this)
+            .setTitle("💵 ¡Pago recibido!")
+            .setMessage("Te pagaron $${formato(r.getLong("total"))} en efectivo.\n¡Gracias por reciclar! ♻")
+            .setCancelable(false)
+            .setPositiveButton("Aceptar") { _, _ -> limpiarTurnoCliente() }
+            .show()
+    }
+
+    /** Limpia el turno del cliente (solo ocurre tras el pago o un NO_PRESENTADO). */
+    private fun limpiarTurnoCliente() {
+        turnoActivo = -1
+        estadoAnterior = null
+        prefs.edit().remove("turno_id").apply()
+        findViewById<TextView>(R.id.txtRecibo).visibility = View.GONE
+        findViewById<Button>(R.id.btnNuevoTurno).visibility = View.GONE
+        findViewById<EditText>(R.id.inputDocumento).setText("")
+        mostrarVista(R.id.vistaRegistro)
+        cargarMateriales(R.id.spinnerMaterial, conVacio = true)
+    }
+
+    private fun mostrarHistorial() {
+        val cliente = api ?: return
+        val tipoDoc = findViewById<Spinner>(R.id.spinnerTipoDoc).selectedItem.toString()
+        val numeroDoc = findViewById<EditText>(R.id.inputDocumento).text.toString().trim()
+        if (numeroDoc.length < 3) {
+            toast("Escribe tu número de documento para consultar tus pagos")
+            return
+        }
+        io.execute {
+            try {
+                val pagos = cliente.historial(tipoDoc, numeroDoc)
+                ui.post {
+                    val sb = StringBuilder()
+                    var total = 0L
+                    for (i in 0 until pagos.length()) {
+                        val p = pagos.getJSONObject(i)
+                        total += p.getLong("total")
+                        sb.append("• Turno %03d (%s): $%s\n".format(
+                            p.getInt("numero_turno"),
+                            p.optString("fecha_turno", ""),
+                            formato(p.getLong("total"))))
+                    }
+                    val mensaje = if (pagos.length() == 0)
+                        "Aún no tienes pagos registrados con el documento $tipoDoc $numeroDoc."
+                    else
+                        sb.append("\nTotal recibido: $${formato(total)}").toString()
+                    AlertDialog.Builder(this)
+                        .setTitle("🧾 Mis pagos ($tipoDoc $numeroDoc)")
+                        .setMessage(mensaje)
+                        .setPositiveButton("Cerrar", null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                ui.post { toast("No se pudo consultar el historial") }
+            }
         }
     }
 

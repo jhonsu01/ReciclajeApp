@@ -8,18 +8,47 @@ import java.net.URL
 
 /**
  * Cliente HTTP mínimo (HttpURLConnection, sin dependencias externas).
+ * Los roles elevados se autentican con un token de dispositivo (header X-TOKEN)
+ * obtenido al emparejar con el PIN de sesión; el rol cliente no usa token.
  * Todas las llamadas deben ejecutarse fuera del hilo principal.
  */
-class ApiClient(private val host: String, private val puerto: Int, private val pin: String) {
+class ApiClient(private val host: String, private val puerto: Int, private val token: String = "") {
 
     private fun abrir(ruta: String, metodo: String): HttpURLConnection {
         val conn = URL("http://$host:$puerto$ruta").openConnection() as HttpURLConnection
         conn.requestMethod = metodo
         conn.connectTimeout = 4000
         conn.readTimeout = 6000
-        conn.setRequestProperty("X-PIN", pin)
+        if (token.isNotEmpty()) conn.setRequestProperty("X-TOKEN", token)
         conn.setRequestProperty("Content-Type", "application/json")
         return conn
+    }
+
+    /** Empareja el dispositivo con un PIN de sesión y devuelve {token, rol}. */
+    fun emparejar(rol: String, pin: String, nombreDispositivo: String): JSONObject {
+        val conn = abrir("/api/emparejar", "POST")
+        try {
+            conn.doOutput = true
+            val body = JSONObject().put("rol", rol).put("pin", pin).put("nombre", nombreDispositivo)
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            val resp = leer(conn)
+            if (conn.responseCode !in 200..299) throw ApiException(conn.responseCode, extraerError(resp))
+            return JSONObject(resp)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /** Historial de pagos del cliente, filtrado por su documento. */
+    fun historial(tipoDoc: String, numeroDoc: String): JSONArray {
+        val conn = abrir("/api/historial?tipo_documento=$tipoDoc&numero_documento=$numeroDoc", "GET")
+        try {
+            val body = leer(conn)
+            if (conn.responseCode != 200) throw ApiException(conn.responseCode, extraerError(body))
+            return JSONArray(body)
+        } finally {
+            conn.disconnect()
+        }
     }
 
     private fun leer(conn: HttpURLConnection): String {

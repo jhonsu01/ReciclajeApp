@@ -25,4 +25,5 @@
     <string name="btn_agregar_pesaje">Agregar pesaje</string>
     <string name="btn_finalizar">Finalizar y generar recibo</string>
     <string name="btn_volver">← Volver a la lista</string>
+    <string name="btn_historial">🧾 Consultar mis pagos anteriores</string>
 </resources>
