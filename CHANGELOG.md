@@ -4,6 +4,34 @@ Todas las novedades relevantes de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.3.0] - 2026-07-02
+
+### Corregido
+
+- El botón **Llamar** del panel de escritorio no hacía nada (`window.prompt` no existe
+  en Electron): ahora abre un selector de módulos.
+- La pantalla del cliente mezclaba el recibo del turno anterior con el turno nuevo.
+
+### Añadido
+
+- **Recibo legible** en el panel: tabla de materiales con subtotales, estado del pago,
+  quién autorizó y cuándo, firma abreviada y botón **Descargar JSON**.
+- **Materiales personalizados**: agregar nuevos materiales, editar nombres y precios,
+  y eliminar (si tienen pesajes históricos solo se ocultan).
+- **Cliente sin PIN**: el rol cliente conecta automáticamente y se identifica con su
+  documento.
+- **Seguridad por sesión para roles elevados** (pesaje, administrador y kiosko):
+  - El escritorio genera **PINs aleatorios de 6 dígitos por rol en cada arranque**.
+  - El PIN se ingresa una sola vez por dispositivo: el emparejamiento entrega un token
+    persistente, con soporte para **múltiples dispositivos** por rol.
+  - Sección **Dispositivos emparejados** en el panel: ver último acceso y **revocar
+    accesos** al instante; botón para regenerar los PINs de sesión.
+- **Notificación de pago al cliente**: cuando el administrador autoriza el desembolso,
+  el teléfono vibra, muestra "💵 ¡Pago recibido!" y limpia el turno. El turno permanece
+  en pantalla hasta que se pague (no se puede pedir turno nuevo antes).
+- **Historial personal de pagos**: el cliente consulta sus pagos anteriores con su
+  documento, sin ver los de otras personas.
+
 ## [0.2.0] - 2026-07-01
 
 ### Añadido
