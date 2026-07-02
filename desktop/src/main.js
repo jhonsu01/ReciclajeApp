@@ -1,6 +1,6 @@
 'use strict';
 const path = require('path');
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, Menu, dialog } = require('electron');
 const { crearServidor } = require('./server');
 
 const PUERTO = Number(process.env.RECICLAJE_PUERTO) || 3000;
@@ -27,6 +27,7 @@ async function iniciar() {
   win.loadURL(`http://127.0.0.1:${PUERTO}/admin.html`);
 }
 
+Menu.setApplicationMenu(null);
 app.whenReady().then(iniciar);
 
 app.on('window-all-closed', () => {

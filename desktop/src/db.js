@@ -56,7 +56,10 @@ CREATE TABLE IF NOT EXISTS recibos (
   turno_id INTEGER PRIMARY KEY REFERENCES turnos(id),
   json TEXT NOT NULL,
   firma TEXT NOT NULL,
-  fecha TEXT NOT NULL
+  fecha TEXT NOT NULL,
+  pagado INTEGER NOT NULL DEFAULT 0,
+  autorizado_por TEXT,
+  fecha_pago TEXT
 );
 `;
 
@@ -78,7 +81,9 @@ const MATERIALES_SEED = [
 ];
 
 const CONFIG_DEFAULTS = {
-  pin_emparejamiento: '1234',
+  pin_emparejamiento: '1234', // rol cliente
+  pin_pesaje: '5678',         // rol estación de pesaje
+  pin_admin: '9999',          // rol administrador (autoriza desembolsos)
   timeout_minutos: '5',
   num_modulos: '3',
   nombre_centro: 'Centro de Reciclaje',
@@ -99,9 +104,20 @@ class Db {
       : new SQL.Database();
     const db = new Db(sqlDb, filePath);
     db._db.run(SCHEMA);
+    db._migrar();
     db._seed();
     db.save();
     return db;
+  }
+
+  /** Migraciones para bases creadas por versiones anteriores. */
+  _migrar() {
+    const cols = this.query('PRAGMA table_info(recibos)').map(c => c.name);
+    if (!cols.includes('pagado')) {
+      this.run('ALTER TABLE recibos ADD COLUMN pagado INTEGER NOT NULL DEFAULT 0');
+      this.run('ALTER TABLE recibos ADD COLUMN autorizado_por TEXT');
+      this.run('ALTER TABLE recibos ADD COLUMN fecha_pago TEXT');
+    }
   }
 
   _seed() {
@@ -307,7 +323,40 @@ class Db {
   getRecibo(turno_id) {
     const r = this.query('SELECT * FROM recibos WHERE turno_id = ?', [turno_id])[0];
     if (!r) return null;
-    return { ...JSON.parse(r.json), firma: r.firma };
+    return {
+      ...JSON.parse(r.json), firma: r.firma,
+      pagado: !!r.pagado, autorizado_por: r.autorizado_por, fecha_pago: r.fecha_pago,
+    };
+  }
+
+  getRecibos({ pendientes = false } = {}) {
+    let sql = `SELECT r.turno_id, r.json, r.firma, r.fecha, r.pagado, r.autorizado_por, r.fecha_pago,
+                      t.numero, u.tipo_documento, u.numero_documento
+               FROM recibos r
+               JOIN turnos t ON t.id = r.turno_id
+               JOIN usuarios u ON u.id = t.usuario_id`;
+    if (pendientes) sql += ' WHERE r.pagado = 0';
+    sql += ' ORDER BY r.fecha DESC LIMIT 100';
+    return this.query(sql).map(r => ({
+      turno_id: r.turno_id,
+      numero_turno: r.numero,
+      usuario: { tipo_documento: r.tipo_documento, numero_documento: r.numero_documento },
+      total: JSON.parse(r.json).total,
+      fecha: r.fecha,
+      pagado: !!r.pagado,
+      autorizado_por: r.autorizado_por,
+      fecha_pago: r.fecha_pago,
+    }));
+  }
+
+  pagarRecibo(turno_id, autorizadoPor = 'admin') {
+    const r = this.query('SELECT pagado FROM recibos WHERE turno_id = ?', [turno_id])[0];
+    if (!r) return { error: 'Recibo no encontrado' };
+    if (r.pagado) return { error: 'El recibo ya fue pagado' };
+    this.run('UPDATE recibos SET pagado = 1, autorizado_por = ?, fecha_pago = ? WHERE turno_id = ?',
+      [autorizadoPor, new Date().toISOString(), turno_id]);
+    this.save();
+    return this.getRecibo(turno_id);
   }
 }
 

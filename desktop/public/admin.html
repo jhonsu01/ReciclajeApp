@@ -105,7 +105,9 @@
       <b>Configuración del servidor</b>
       <div class="form-grid" style="margin-top:1rem;">
         <div class="campo"><label>Nombre del centro</label><input id="cfg-nombre"></div>
-        <div class="campo"><label>PIN de emparejamiento (app móvil)</label><input id="cfg-pin" maxlength="8"></div>
+        <div class="campo"><label>PIN rol Cliente (vende material)</label><input id="cfg-pin" maxlength="8"></div>
+        <div class="campo"><label>PIN rol Pesaje (báscula)</label><input id="cfg-pin-pesaje" maxlength="8"></div>
+        <div class="campo"><label>PIN rol Administrador (pagos)</label><input id="cfg-pin-admin" maxlength="8"></div>
         <div class="campo"><label>Timeout de ausencia (minutos)</label><input id="cfg-timeout" type="number" min="1"></div>
         <div class="campo"><label>Número de módulos</label><input id="cfg-modulos" type="number" min="1" max="20"></div>
       </div>
@@ -144,9 +146,12 @@
 <!-- Modal recibo -->
 <div class="modal-fondo" id="modal-recibo">
   <div class="modal">
-    <h3>Recibo generado ✓</h3>
+    <h3>Recibo <span id="recibo-estado-pago"></span></h3>
     <pre class="recibo" id="recibo-json"></pre>
-    <div class="fila-acciones"><button class="accion primario" onclick="cerrarModal('modal-recibo')">Cerrar</button></div>
+    <div class="fila-acciones">
+      <button class="accion" onclick="cerrarModal('modal-recibo')">Cerrar</button>
+      <button class="accion primario" id="btn-pagar" style="display:none" onclick="autorizarPago()">💵 Autorizar desembolso</button>
+    </div>
   </div>
 </div>
 
@@ -272,17 +277,36 @@ async function registrarPesaje() {
   await refrescarPesajes();
 }
 
-async function finalizarTurno() {
-  const recibo = await api(`/api/turnos/${turnoPesajeId}/finalizar`, { method: 'POST' });
-  cerrarModal('modal-pesaje');
+let reciboActualId = null;
+
+function pintarRecibo(recibo) {
+  reciboActualId = recibo.turno_id;
   $('recibo-json').textContent = JSON.stringify(recibo, null, 2);
+  const pagado = !!recibo.pagado;
+  $('recibo-estado-pago').innerHTML = pagado
+    ? '<span class="badge FINALIZADO">PAGADO ✓</span>'
+    : '<span class="badge LLAMADO">PENDIENTE DE PAGO</span>';
+  $('btn-pagar').style.display = pagado ? 'none' : 'inline-block';
   $('modal-recibo').classList.add('abierto');
 }
 
+async function finalizarTurno() {
+  const recibo = await api(`/api/turnos/${turnoPesajeId}/finalizar`, { method: 'POST' });
+  cerrarModal('modal-pesaje');
+  pintarRecibo(recibo);
+}
+
 async function verRecibo(id) {
-  const recibo = await api(`/api/recibos/${id}`);
-  $('recibo-json').textContent = JSON.stringify(recibo, null, 2);
-  $('modal-recibo').classList.add('abierto');
+  pintarRecibo(await api(`/api/recibos/${id}`));
+}
+
+async function autorizarPago() {
+  if (!confirm('¿Autorizar el desembolso del efectivo de este recibo?')) return;
+  const recibo = await api(`/api/recibos/${reciboActualId}/pagar`, {
+    method: 'POST',
+    body: JSON.stringify({ autorizado_por: 'panel' }),
+  });
+  pintarRecibo(recibo);
 }
 
 // ---- Nuevo turno manual ----
@@ -330,13 +354,21 @@ async function cargarConfig() {
   config = await api('/api/config');
   $('cfg-nombre').value = config.nombre_centro || '';
   $('cfg-pin').value = config.pin_emparejamiento || '';
+  $('cfg-pin-pesaje').value = config.pin_pesaje || '';
+  $('cfg-pin-admin').value = config.pin_admin || '';
   $('cfg-timeout').value = config.timeout_minutos || 5;
   $('cfg-modulos').value = config.num_modulos || 3;
   $('conexion').innerHTML =
-    `Servidor: <b>http://${config.ip}:${config.puerto}</b> &nbsp;|&nbsp; PIN app: <b>${config.pin_emparejamiento}</b>`;
+    `Servidor: <b>http://${config.ip}:${config.puerto}</b> &nbsp;|&nbsp; ` +
+    `PIN cliente: <b>${config.pin_emparejamiento}</b> · pesaje: <b>${config.pin_pesaje}</b> · admin: <b>${config.pin_admin}</b>`;
   $('instrucciones-app').innerHTML =
-    `En la app Android ingresa el servidor <b>${config.ip}</b>, puerto <b>${config.puerto}</b> y el PIN <b>${config.pin_emparejamiento}</b>. ` +
-    `El teléfono debe estar en la misma red WiFi (o conectado al hotspot de este equipo).`;
+    `La app Android <b>detecta este servidor automáticamente</b> (misma red WiFi o hotspot de este equipo). ` +
+    `Al abrirla, cada dispositivo elige su rol e ingresa el PIN correspondiente:<br>` +
+    `&nbsp;• <b>Cliente</b> (vende material): PIN <b>${config.pin_emparejamiento}</b><br>` +
+    `&nbsp;• <b>Pesaje</b> (registra kilos y valor): PIN <b>${config.pin_pesaje}</b><br>` +
+    `&nbsp;• <b>Administrador</b> (autoriza desembolsos): PIN <b>${config.pin_admin}</b><br>` +
+    `&nbsp;• <b>Modo Kiosko</b> (TV con el turnero): no requiere PIN.<br>` +
+    `Si la detección automática falla, la IP es <b>${config.ip}</b> y el puerto <b>${config.puerto}</b>.`;
 }
 
 async function guardarConfig() {
@@ -345,6 +377,8 @@ async function guardarConfig() {
     body: JSON.stringify({
       nombre_centro: $('cfg-nombre').value.trim(),
       pin_emparejamiento: $('cfg-pin').value.trim(),
+      pin_pesaje: $('cfg-pin-pesaje').value.trim(),
+      pin_admin: $('cfg-pin-admin').value.trim(),
       timeout_minutos: Number($('cfg-timeout').value) || 5,
       num_modulos: Number($('cfg-modulos').value) || 3,
     }),
