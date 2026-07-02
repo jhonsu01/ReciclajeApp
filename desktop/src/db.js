@@ -90,12 +90,11 @@ const MATERIALES_SEED = [
 ];
 
 const CONFIG_DEFAULTS = {
-  pin_emparejamiento: '1234', // rol cliente
-  pin_pesaje: '5678',         // rol estación de pesaje
-  pin_admin: '9999',          // rol administrador (autoriza desembolsos)
   timeout_minutos: '5',
   num_modulos: '3',
   nombre_centro: 'Centro de Reciclaje',
+  marquesina_velocidad: '45', // segundos por vuelta completa de la cinta
+  marquesina_mensaje: '',     // texto adicional tras los precios (teléfonos, avisos)
   secreto_firma: '', // se genera al iniciar
 };
 
@@ -237,9 +236,16 @@ class Db {
       usuario = this.query('SELECT * FROM usuarios ORDER BY id DESC LIMIT 1')[0];
     }
     const hoy = new Date().toISOString().slice(0, 10);
-    // Un solo turno abierto por usuario y día
+    // Un solo turno abierto por usuario y día. Un turno FINALIZADO cuenta como
+    // abierto mientras no se haya pagado: el cliente retoma ese turno en vez de
+    // crear uno nuevo (no puede volver a la fila con dinero pendiente por cobrar).
     const abierto = this.query(
-      `SELECT * FROM turnos WHERE usuario_id = ? AND fecha = ? AND estado IN ('ESPERANDO','LLAMADO','EN_PESAJE')`,
+      `SELECT t.id FROM turnos t
+       LEFT JOIN recibos r ON r.turno_id = t.id
+       WHERE t.usuario_id = ? AND t.fecha = ?
+         AND (t.estado IN ('ESPERANDO','LLAMADO','EN_PESAJE')
+              OR (t.estado = 'FINALIZADO' AND COALESCE(r.pagado, 0) = 0))
+       ORDER BY t.id DESC`,
       [usuario.id, hoy])[0];
     if (abierto) return this.turnoCompleto(abierto.id);
 
@@ -270,10 +276,12 @@ class Db {
   getTurnos({ fecha = null, estado = null } = {}) {
     const f = fecha || new Date().toISOString().slice(0, 10);
     let sql = `SELECT t.*, u.tipo_documento, u.numero_documento,
-                      m.familia, m.subcategoria, m.presentacion
+                      m.familia, m.subcategoria, m.presentacion,
+                      r.pagado, r.fecha_pago
                FROM turnos t
                JOIN usuarios u ON u.id = t.usuario_id
                LEFT JOIN materiales m ON m.id = t.material_id
+               LEFT JOIN recibos r ON r.turno_id = t.id
                WHERE t.fecha = ?`;
     const params = [f];
     if (estado) { sql += ' AND t.estado = ?'; params.push(estado); }
@@ -383,15 +391,15 @@ class Db {
     }));
   }
 
-  /** Recibos pagados de un usuario (historial personal del cliente). */
+  /** Recibos de un usuario, pendientes primero (historial personal del cliente). */
   getPagosDeUsuario(tipo_documento, numero_documento) {
     return this.query(
-      `SELECT r.turno_id, r.json, r.fecha_pago, t.numero, t.fecha AS fecha_turno
+      `SELECT r.turno_id, r.json, r.pagado, r.fecha_pago, r.fecha, t.numero, t.fecha AS fecha_turno
        FROM recibos r
        JOIN turnos t ON t.id = r.turno_id
        JOIN usuarios u ON u.id = t.usuario_id
-       WHERE r.pagado = 1 AND u.tipo_documento = ? AND u.numero_documento = ?
-       ORDER BY r.fecha_pago DESC LIMIT 50`,
+       WHERE u.tipo_documento = ? AND u.numero_documento = ?
+       ORDER BY r.pagado ASC, r.fecha DESC LIMIT 50`,
       [tipo_documento, numero_documento]
     ).map(r => {
       const recibo = JSON.parse(r.json);
@@ -399,6 +407,7 @@ class Db {
         turno_id: r.turno_id,
         numero_turno: r.numero,
         fecha_turno: r.fecha_turno,
+        pagado: !!r.pagado,
         fecha_pago: r.fecha_pago,
         total: recibo.total,
         detalle: recibo.detalle,

@@ -43,6 +43,15 @@ const { crearServidor } = require(path.join(__dirname, '..', 'desktop', 'src', '
   if (r.status !== 200 || !rec.firma || rec.total <= 0) throw new Error('recibo falló');
   console.log('recibo OK: total', rec.total);
 
+  // Bug v0.3: con el pago pendiente, el mismo documento NO puede sacar turno nuevo
+  r = await fetch(base + '/api/turnos', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tipo_documento: 'CC', numero_documento: '1234567' }),
+  });
+  const retomado = await j(r);
+  if (retomado.id !== t.id) throw new Error(`turno duplicado con pago pendiente (esperaba ${t.id}, creó ${retomado.id})`);
+  console.log('retoma turno con pago pendiente OK (no duplica)');
+
   // Pago de recibos (rol administrador)
   r = await fetch(base + '/api/recibos?pendientes=1');
   const pendientes = await j(r);
@@ -57,11 +66,26 @@ const { crearServidor } = require(path.join(__dirname, '..', 'desktop', 'src', '
   if (r.status !== 400) throw new Error('doble pago no fue rechazado');
   console.log('pago de recibo OK (y doble pago rechazado)');
 
-  // Historial del cliente por documento
+  // Tras el pago sí puede sacar un turno nuevo
+  r = await fetch(base + '/api/turnos', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tipo_documento: 'CC', numero_documento: '1234567' }),
+  });
+  const nuevo = await j(r);
+  if (nuevo.id === t.id) throw new Error('tras el pago debería poder crear turno nuevo');
+  console.log('nuevo turno tras pago OK: numero', nuevo.numero);
+
+  // Historial del cliente por documento (incluye estado de pago)
   r = await fetch(base + '/api/historial?tipo_documento=CC&numero_documento=1234567');
   const historial = await j(r);
-  if (r.status !== 200 || historial.length !== 1 || historial[0].total <= 0) throw new Error('historial falló');
-  console.log('historial de pagos OK:', historial.length, 'pago(s)');
+  if (r.status !== 200 || historial.length !== 1 || historial[0].pagado !== true) throw new Error('historial falló');
+  console.log('historial de recibos OK:', historial.length, 'recibo(s)');
+
+  // Config pública de la marquesina
+  r = await fetch(base + '/api/display');
+  const displayCfg = await j(r);
+  if (r.status !== 200 || !(displayCfg.marquesina_velocidad > 0)) throw new Error('config display falló');
+  console.log('config marquesina OK: velocidad', displayCfg.marquesina_velocidad, 's');
 
   // Emparejamiento por PIN de sesión -> token de dispositivo + revocación
   r = await fetch(base + '/api/config');

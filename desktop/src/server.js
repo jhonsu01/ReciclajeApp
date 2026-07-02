@@ -119,6 +119,15 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
 
   app.get('/api/materiales', (_req, res) => res.json(db.getMateriales()));
 
+  // Configuración pública de las pantallas (marquesina del turnero)
+  app.get('/api/display', (_req, res) => {
+    res.json({
+      nombre_centro: db.getConfig('nombre_centro'),
+      marquesina_velocidad: Number(db.getConfig('marquesina_velocidad')) || 45,
+      marquesina_mensaje: db.getConfig('marquesina_mensaje') || '',
+    });
+  });
+
   app.put('/api/materiales/:id', conToken(), (req, res) => {
     const m = db.updateMaterial(Number(req.params.id), req.body || {});
     if (!m) return res.status(400).json({ error: 'Nada que actualizar o material inexistente' });
@@ -270,7 +279,7 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
   });
 
   app.put('/api/config', soloAdmin, (req, res) => {
-    const permitidas = ['timeout_minutos', 'num_modulos', 'nombre_centro'];
+    const permitidas = ['timeout_minutos', 'num_modulos', 'nombre_centro', 'marquesina_velocidad', 'marquesina_mensaje'];
     for (const k of permitidas) {
       if (req.body[k] !== undefined) db.setConfig(k, req.body[k]);
     }

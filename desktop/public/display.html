@@ -126,11 +126,19 @@ async function cargarTurnos() {
 
 async function cargarPrecios() {
   try {
-    const r = await fetch('/api/materiales');
-    const mats = await r.json();
-    $('precios').innerHTML = mats.map(m =>
-      `<b>${m.familia} · ${m.subcategoria} (${m.presentacion})</b> ${fmt(m.precio_promedio)}/kg`
-    ).join(' &nbsp;&nbsp;•&nbsp;&nbsp; ');
+    const [rm, rd] = await Promise.all([fetch('/api/materiales'), fetch('/api/display')]);
+    const mats = await rm.json();
+    const cfg = await rd.json();
+    if (cfg.nombre_centro) $('nombre').textContent = cfg.nombre_centro;
+
+    const partes = mats.map(m =>
+      `<b>${m.familia} · ${m.subcategoria} (${m.presentacion})</b> ${fmt(m.precio_promedio)}/kg`);
+    if (cfg.marquesina_mensaje) {
+      partes.push(`<b style="color:var(--amarillo)">📢 ${cfg.marquesina_mensaje}</b>`);
+    }
+    $('precios').innerHTML = partes.join(' &nbsp;&nbsp;•&nbsp;&nbsp; ');
+    // Velocidad configurable: segundos por vuelta completa de la cinta
+    $('precios').style.animationDuration = `${Number(cfg.marquesina_velocidad) || 45}s`;
   } catch (e) {}
 }
 
@@ -149,7 +157,7 @@ function conectarWS() {
   ws.onmessage = ev => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'turnos_updated') { cargarTurnos(); if (msg.llamado) beep(); }
-    if (msg.type === 'materiales_updated') cargarPrecios();
+    if (msg.type === 'materiales_updated' || msg.type === 'config_updated') cargarPrecios();
   };
   ws.onclose = () => setTimeout(conectarWS, 3000);
 }

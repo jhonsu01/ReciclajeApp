@@ -79,14 +79,31 @@
   <div class="tab activo" id="tab-turnos">
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;">
       <div>
-        <b>Turnos de hoy</b>
+        <b>Turnos</b>
         <div class="hint">La pantalla del turnero está en <a href="/display.html" target="_blank">/display.html</a> (ábrela en las pantallas informativas).</div>
       </div>
       <button class="accion primario" onclick="abrirNuevoTurno()">+ Registrar turno manual</button>
     </div>
+    <div class="card" style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:end;">
+      <div class="campo" style="flex:1;min-width:180px;"><label>Buscar (documento o Nº de turno)</label>
+        <input id="filtro-texto" placeholder="Ej: 1121888926 o 006" oninput="pintarTurnos()"></div>
+      <div class="campo"><label>Estado</label>
+        <select id="filtro-estado" onchange="pintarTurnos()">
+          <option value="">Todos</option>
+          <option value="ESPERANDO">Esperando</option>
+          <option value="LLAMADO">Llamado</option>
+          <option value="EN_PESAJE">En pesaje</option>
+          <option value="POR_PAGAR">Por pagar 💵</option>
+          <option value="PAGADO">Pagado ✓</option>
+          <option value="NO_PRESENTADO">No presentado</option>
+        </select></div>
+      <div class="campo"><label>Fecha</label>
+        <input id="filtro-fecha" type="date" onchange="cargarTurnos()"></div>
+      <button class="accion" onclick="limpiarFiltros()">Limpiar</button>
+    </div>
     <table>
-      <thead><tr><th>Turno</th><th>Documento</th><th>Material declarado</th><th>Estado</th><th>Módulo</th><th>Acciones</th></tr></thead>
-      <tbody id="cuerpo-turnos"><tr><td colspan="6">Cargando…</td></tr></tbody>
+      <thead><tr><th>Turno</th><th>Documento</th><th>Material declarado</th><th>Registro</th><th>Atención</th><th>Estado</th><th>Módulo</th><th>Acciones</th></tr></thead>
+      <tbody id="cuerpo-turnos"><tr><td colspan="8">Cargando…</td></tr></tbody>
     </table>
   </div>
 
@@ -120,6 +137,18 @@
         <div class="campo"><label>Nombre del centro</label><input id="cfg-nombre"></div>
         <div class="campo"><label>Timeout de ausencia (minutos)</label><input id="cfg-timeout" type="number" min="1"></div>
         <div class="campo"><label>Número de módulos</label><input id="cfg-modulos" type="number" min="1" max="20"></div>
+      </div>
+      <div class="fila-acciones"><button class="accion primario" onclick="guardarConfig()">Guardar configuración</button></div>
+    </div>
+    <div class="card">
+      <b>📺 Marquesina del turnero (modo kiosko y pantallas)</b>
+      <div class="hint">La cinta inferior muestra la lista completa de precios de los materiales,
+      seguida del mensaje personalizado (teléfonos, promociones, avisos).</div>
+      <div class="form-grid" style="margin-top:.8rem;max-width:100%;">
+        <div class="campo"><label>Velocidad (segundos por vuelta — menor = más rápida)</label>
+          <input id="cfg-marquesina-vel" type="number" min="5" max="300"></div>
+        <div class="campo" style="grid-column: span 2;"><label>Mensaje personalizado (teléfonos, avisos…)</label>
+          <input id="cfg-marquesina-msg" placeholder="Ej: ☎ 300 123 4567 — Compramos tu reciclaje de lunes a sábado 8am-5pm"></div>
       </div>
       <div class="fila-acciones"><button class="accion primario" onclick="guardarConfig()">Guardar configuración</button></div>
     </div>
@@ -245,9 +274,49 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 });
 
 // ---- Turnos ----
+let turnosCache = [];
+
+function hora(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+}
+
 async function cargarTurnos() {
-  const turnos = await api('/api/turnos');
-  $('cuerpo-turnos').innerHTML = turnos.length ? turnos.map(t => {
+  const fecha = $('filtro-fecha').value;
+  turnosCache = await api('/api/turnos' + (fecha ? `?fecha=${fecha}` : ''));
+  pintarTurnos();
+}
+
+function limpiarFiltros() {
+  $('filtro-texto').value = '';
+  $('filtro-estado').value = '';
+  $('filtro-fecha').value = '';
+  cargarTurnos();
+}
+
+function estadoVisual(t) {
+  // FINALIZADO se desglosa según el pago para no ocultar desembolsos pendientes
+  if (t.estado === 'FINALIZADO') {
+    return t.pagado
+      ? '<span class="badge FINALIZADO">PAGADO ✓</span>'
+      : '<span class="badge LLAMADO">POR PAGAR 💵</span>';
+  }
+  return `<span class="badge ${t.estado}">${t.estado.replace('_', ' ')}</span>`;
+}
+
+function pintarTurnos() {
+  const texto = $('filtro-texto').value.trim().toLowerCase();
+  const filtroEstado = $('filtro-estado').value;
+  const filtrados = turnosCache.filter(t => {
+    if (texto && !(
+      String(t.numero_documento).toLowerCase().includes(texto) ||
+      pad(t.numero).includes(texto) || String(t.numero) === texto)) return false;
+    if (filtroEstado === 'POR_PAGAR') return t.estado === 'FINALIZADO' && !t.pagado;
+    if (filtroEstado === 'PAGADO') return t.estado === 'FINALIZADO' && !!t.pagado;
+    if (filtroEstado) return t.estado === filtroEstado;
+    return true;
+  });
+  $('cuerpo-turnos').innerHTML = filtrados.length ? filtrados.map(t => {
     const mat = t.familia ? `${t.familia} / ${t.subcategoria}` : '—';
     const acciones = [];
     if (t.estado === 'ESPERANDO' || t.estado === 'NO_PRESENTADO')
@@ -257,16 +326,18 @@ async function cargarTurnos() {
     if (t.estado === 'LLAMADO')
       acciones.push(`<button class="accion peligro" onclick="noPresentado(${t.id})">No presentado</button>`);
     if (t.estado === 'FINALIZADO')
-      acciones.push(`<button class="accion" onclick="verRecibo(${t.id})">Ver recibo</button>`);
+      acciones.push(`<button class="accion${t.pagado ? '' : ' primario'}" onclick="verRecibo(${t.id})">${t.pagado ? 'Ver recibo' : '💵 Ver y pagar'}</button>`);
     return `<tr>
       <td class="num"><b>${pad(t.numero)}</b></td>
       <td>${t.tipo_documento} ${t.numero_documento}</td>
       <td>${mat}</td>
-      <td><span class="badge ${t.estado}">${t.estado.replace('_', ' ')}</span></td>
+      <td class="num">${hora(t.timestamp)}</td>
+      <td class="num">${hora(t.llamado_en)}</td>
+      <td>${estadoVisual(t)}</td>
       <td class="num">${t.modulo_asignado ?? '—'}</td>
       <td>${acciones.join('')}</td>
     </tr>`;
-  }).join('') : '<tr><td colspan="6">No hay turnos registrados hoy.</td></tr>';
+  }).join('') : '<tr><td colspan="8">No hay turnos que coincidan con el filtro.</td></tr>';
 }
 
 // window.prompt() no existe en Electron: se usa un modal con botones por módulo
@@ -483,6 +554,8 @@ async function cargarConfig() {
   $('cfg-nombre').value = config.nombre_centro || '';
   $('cfg-timeout').value = config.timeout_minutos || 5;
   $('cfg-modulos').value = config.num_modulos || 3;
+  $('cfg-marquesina-vel').value = config.marquesina_velocidad || 45;
+  $('cfg-marquesina-msg').value = config.marquesina_mensaje || '';
   pintarPines();
   $('instrucciones-app').innerHTML =
     `La app Android <b>detecta este servidor automáticamente</b> (misma red WiFi o hotspot de este equipo). ` +
@@ -501,6 +574,8 @@ async function guardarConfig() {
       nombre_centro: $('cfg-nombre').value.trim(),
       timeout_minutos: Number($('cfg-timeout').value) || 5,
       num_modulos: Number($('cfg-modulos').value) || 3,
+      marquesina_velocidad: Number($('cfg-marquesina-vel').value) || 45,
+      marquesina_mensaje: $('cfg-marquesina-msg').value.trim(),
     }),
   });
   await cargarConfig();
