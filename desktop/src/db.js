@@ -61,6 +61,15 @@ CREATE TABLE IF NOT EXISTS recibos (
   autorizado_por TEXT,
   fecha_pago TEXT
 );
+CREATE TABLE IF NOT EXISTS dispositivos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  token TEXT NOT NULL UNIQUE,
+  rol TEXT NOT NULL CHECK (rol IN ('pesaje','admin','kiosko')),
+  nombre TEXT,
+  creado TEXT NOT NULL,
+  ultimo_acceso TEXT,
+  activo INTEGER NOT NULL DEFAULT 1
+);
 `;
 
 // Precios referenciales COP/kg (Mayo 2025). Editables desde el panel admin.
@@ -117,6 +126,10 @@ class Db {
       this.run('ALTER TABLE recibos ADD COLUMN pagado INTEGER NOT NULL DEFAULT 0');
       this.run('ALTER TABLE recibos ADD COLUMN autorizado_por TEXT');
       this.run('ALTER TABLE recibos ADD COLUMN fecha_pago TEXT');
+    }
+    const colsMat = this.query('PRAGMA table_info(materiales)').map(c => c.name);
+    if (!colsMat.includes('activo')) {
+      this.run('ALTER TABLE materiales ADD COLUMN activo INTEGER NOT NULL DEFAULT 1');
     }
   }
 
@@ -175,7 +188,28 @@ class Db {
 
   // ---- Materiales ----
   getMateriales() {
-    return this.query('SELECT * FROM materiales ORDER BY familia, subcategoria, presentacion');
+    return this.query('SELECT * FROM materiales WHERE activo = 1 ORDER BY familia, subcategoria, presentacion');
+  }
+
+  crearMaterial({ familia, subcategoria, presentacion, precio_promedio, precio_min, precio_max }) {
+    this.run(
+      `INSERT INTO materiales (familia, subcategoria, presentacion, precio_promedio, precio_min, precio_max, activo)
+       VALUES (?, ?, ?, ?, ?, ?, 1)`,
+      [familia, subcategoria, presentacion, precio_promedio, precio_min, precio_max]);
+    this.save();
+    return this.query('SELECT * FROM materiales ORDER BY id DESC LIMIT 1')[0];
+  }
+
+  eliminarMaterial(id) {
+    const usado = this.query('SELECT COUNT(*) AS c FROM pesajes WHERE material_id = ?', [id])[0].c;
+    if (usado > 0) {
+      // Conserva el histórico de pesajes: solo se oculta de la lista
+      this.run('UPDATE materiales SET activo = 0 WHERE id = ?', [id]);
+    } else {
+      this.run('DELETE FROM materiales WHERE id = ?', [id]);
+    }
+    this.save();
+    return { ok: true, oculto: usado > 0 };
   }
 
   updateMaterial(id, campos) {
@@ -347,6 +381,62 @@ class Db {
       autorizado_por: r.autorizado_por,
       fecha_pago: r.fecha_pago,
     }));
+  }
+
+  /** Recibos pagados de un usuario (historial personal del cliente). */
+  getPagosDeUsuario(tipo_documento, numero_documento) {
+    return this.query(
+      `SELECT r.turno_id, r.json, r.fecha_pago, t.numero, t.fecha AS fecha_turno
+       FROM recibos r
+       JOIN turnos t ON t.id = r.turno_id
+       JOIN usuarios u ON u.id = t.usuario_id
+       WHERE r.pagado = 1 AND u.tipo_documento = ? AND u.numero_documento = ?
+       ORDER BY r.fecha_pago DESC LIMIT 50`,
+      [tipo_documento, numero_documento]
+    ).map(r => {
+      const recibo = JSON.parse(r.json);
+      return {
+        turno_id: r.turno_id,
+        numero_turno: r.numero,
+        fecha_turno: r.fecha_turno,
+        fecha_pago: r.fecha_pago,
+        total: recibo.total,
+        detalle: recibo.detalle,
+      };
+    });
+  }
+
+  // ---- Dispositivos emparejados (roles elevados) ----
+  crearDispositivo(rol, nombre) {
+    const token = crypto.randomBytes(24).toString('hex');
+    this.run(
+      'INSERT INTO dispositivos (token, rol, nombre, creado, ultimo_acceso, activo) VALUES (?, ?, ?, ?, ?, 1)',
+      [token, rol, nombre || 'dispositivo', new Date().toISOString(), new Date().toISOString()]);
+    this.save();
+    return this.query('SELECT * FROM dispositivos ORDER BY id DESC LIMIT 1')[0];
+  }
+
+  dispositivoPorToken(token) {
+    if (!token) return null;
+    const d = this.query('SELECT * FROM dispositivos WHERE token = ? AND activo = 1', [token])[0];
+    if (!d) return null;
+    // Bump de último acceso (máx. una escritura por minuto para no castigar el disco)
+    const hace1min = new Date(Date.now() - 60 * 1000).toISOString();
+    if (!d.ultimo_acceso || d.ultimo_acceso < hace1min) {
+      this.run('UPDATE dispositivos SET ultimo_acceso = ? WHERE id = ?', [new Date().toISOString(), d.id]);
+      this.save();
+    }
+    return d;
+  }
+
+  getDispositivos() {
+    return this.query('SELECT id, rol, nombre, creado, ultimo_acceso, activo FROM dispositivos ORDER BY activo DESC, ultimo_acceso DESC');
+  }
+
+  revocarDispositivo(id) {
+    this.run('UPDATE dispositivos SET activo = 0 WHERE id = ?', [id]);
+    this.save();
+    return { ok: true };
   }
 
   pagarRecibo(turno_id, autorizadoPor = 'admin') {

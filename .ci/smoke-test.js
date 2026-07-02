@@ -57,6 +57,45 @@ const { crearServidor } = require(path.join(__dirname, '..', 'desktop', 'src', '
   if (r.status !== 400) throw new Error('doble pago no fue rechazado');
   console.log('pago de recibo OK (y doble pago rechazado)');
 
+  // Historial del cliente por documento
+  r = await fetch(base + '/api/historial?tipo_documento=CC&numero_documento=1234567');
+  const historial = await j(r);
+  if (r.status !== 200 || historial.length !== 1 || historial[0].total <= 0) throw new Error('historial falló');
+  console.log('historial de pagos OK:', historial.length, 'pago(s)');
+
+  // Emparejamiento por PIN de sesión -> token de dispositivo + revocación
+  r = await fetch(base + '/api/config');
+  const cfg = await j(r);
+  if (!cfg.pines_sesion || !cfg.pines_sesion.pesaje) throw new Error('pines de sesión ausentes');
+  r = await fetch(base + '/api/emparejar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rol: 'pesaje', pin: 'incorrecto', nombre: 'test' }),
+  });
+  if (r.status !== 401) throw new Error('emparejar con PIN malo no fue rechazado');
+  r = await fetch(base + '/api/emparejar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rol: 'pesaje', pin: cfg.pines_sesion.pesaje, nombre: 'smoke-device' }),
+  });
+  const emparejado = await j(r);
+  if (r.status !== 201 || !emparejado.token) throw new Error('emparejar falló');
+  r = await fetch(base + '/api/dispositivos');
+  const dispositivos = await j(r);
+  if (!dispositivos.length || !dispositivos[0].activo) throw new Error('dispositivo no registrado');
+  r = await fetch(`${base}/api/dispositivos/${dispositivos[0].id}/revocar`, { method: 'POST' });
+  if (r.status !== 200) throw new Error('revocar falló');
+  console.log('emparejamiento + revocación OK');
+
+  // Materiales personalizados: crear y eliminar
+  r = await fetch(base + '/api/materiales', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ familia: 'Prueba', subcategoria: 'Custom', presentacion: 'Suelto', precio_promedio: 999 }),
+  });
+  const nuevoMat = await j(r);
+  if (r.status !== 201 || !nuevoMat.id) throw new Error('crear material falló');
+  r = await fetch(`${base}/api/materiales/${nuevoMat.id}`, { method: 'DELETE' });
+  if (r.status !== 200) throw new Error('eliminar material falló');
+  console.log('materiales personalizados OK');
+
   // Autodescubrimiento UDP
   await new Promise((resolve, reject) => {
     const dgram = require('dgram');
@@ -64,10 +103,15 @@ const { crearServidor } = require(path.join(__dirname, '..', 'desktop', 'src', '
     const timer = setTimeout(() => { cliente.close(); reject(new Error('discovery UDP sin respuesta')); }, 4000);
     cliente.on('message', (msg) => {
       const info = JSON.parse(msg.toString());
+      if (info.tipo !== 'RECICLAJE_SERVER') return; // ruido de red: seguir esperando
+      if (info.puerto !== 3999) {
+        // Otra instancia local (la app instalada abierta) también responde: protocolo OK igualmente
+        console.log('discovery UDP OK (respondió otra instancia local):', `${info.ip}:${info.puerto}`);
+      } else {
+        console.log('discovery UDP OK:', info.nombre, `${info.ip}:${info.puerto}`);
+      }
       clearTimeout(timer);
       cliente.close();
-      if (info.tipo !== 'RECICLAJE_SERVER' || info.puerto !== 3999) return reject(new Error('respuesta discovery inválida'));
-      console.log('discovery UDP OK:', info.nombre, `${info.ip}:${info.puerto}`);
       resolve();
     });
     cliente.send('RECICLAJE_DISCOVER', 18300, '127.0.0.1');

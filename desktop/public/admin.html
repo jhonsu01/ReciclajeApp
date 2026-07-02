@@ -91,8 +91,21 @@
   </div>
 
   <div class="tab" id="tab-materiales">
-    <div class="card"><b>Precios por kg</b>
-      <div class="hint">Precios referenciales Mayo 2025 — edítalos según tu región y guarda cada fila.</div>
+    <div class="card">
+      <b>Agregar material personalizado</b>
+      <div class="form-grid" style="margin-top:.8rem;max-width:100%;">
+        <div class="campo"><label>Familia</label><input id="nm-familia" placeholder="Ej: Plástico"></div>
+        <div class="campo"><label>Subcategoría</label><input id="nm-sub" placeholder="Ej: PET verde"></div>
+        <div class="campo"><label>Presentación</label><input id="nm-pres" placeholder="Ej: Suelto"></div>
+        <div class="campo"><label>Precio promedio ($/kg)</label><input id="nm-prom" type="number" min="1"></div>
+        <div class="campo"><label>Precio mín (opcional)</label><input id="nm-min" type="number" min="0"></div>
+        <div class="campo"><label>Precio máx (opcional)</label><input id="nm-max" type="number" min="0"></div>
+      </div>
+      <div class="fila-acciones"><button class="accion primario" onclick="agregarMaterial()">+ Agregar material</button></div>
+    </div>
+    <div class="card"><b>Materiales y precios por kg</b>
+      <div class="hint">Puedes editar nombres y precios (guarda cada fila) o eliminar materiales.
+      Los precios iniciales son referenciales de Mayo 2025.</div>
     </div>
     <table>
       <thead><tr><th>Familia</th><th>Subcategoría</th><th>Presentación</th><th>Promedio</th><th>Mín</th><th>Máx</th><th></th></tr></thead>
@@ -105,13 +118,31 @@
       <b>Configuración del servidor</b>
       <div class="form-grid" style="margin-top:1rem;">
         <div class="campo"><label>Nombre del centro</label><input id="cfg-nombre"></div>
-        <div class="campo"><label>PIN rol Cliente (vende material)</label><input id="cfg-pin" maxlength="8"></div>
-        <div class="campo"><label>PIN rol Pesaje (báscula)</label><input id="cfg-pin-pesaje" maxlength="8"></div>
-        <div class="campo"><label>PIN rol Administrador (pagos)</label><input id="cfg-pin-admin" maxlength="8"></div>
         <div class="campo"><label>Timeout de ausencia (minutos)</label><input id="cfg-timeout" type="number" min="1"></div>
         <div class="campo"><label>Número de módulos</label><input id="cfg-modulos" type="number" min="1" max="20"></div>
       </div>
       <div class="fila-acciones"><button class="accion primario" onclick="guardarConfig()">Guardar configuración</button></div>
+    </div>
+    <div class="card">
+      <b>🔐 PINs de emparejamiento de esta sesión</b>
+      <div class="hint">Cambian en cada arranque del servidor. Se ingresan UNA sola vez por dispositivo:
+      al emparejar, el dispositivo recibe un acceso permanente que puedes revocar abajo.
+      El rol Cliente no necesita PIN.</div>
+      <table style="margin-top:.8rem;max-width:520px;">
+        <thead><tr><th>Rol</th><th>PIN de sesión</th></tr></thead>
+        <tbody id="cuerpo-pines"></tbody>
+      </table>
+      <div class="fila-acciones">
+        <button class="accion" onclick="regenerarPines()">🔄 Regenerar PINs (invalida los no usados)</button>
+      </div>
+    </div>
+    <div class="card">
+      <b>📱 Dispositivos emparejados</b>
+      <div class="hint">Roles elevados conectados con acceso vigente. Revocar desconecta el dispositivo de inmediato.</div>
+      <table style="margin-top:.8rem;">
+        <thead><tr><th>Dispositivo</th><th>Rol</th><th>Emparejado</th><th>Último acceso</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="cuerpo-dispositivos"></tbody>
+      </table>
     </div>
     <div class="card">
       <b>Conexión de la app Android</b>
@@ -146,12 +177,29 @@
 <!-- Modal recibo -->
 <div class="modal-fondo" id="modal-recibo">
   <div class="modal">
-    <h3>Recibo <span id="recibo-estado-pago"></span></h3>
-    <pre class="recibo" id="recibo-json"></pre>
+    <h3>Recibo — Turno <span id="recibo-turno" class="num"></span> <span id="recibo-estado-pago"></span></h3>
+    <p class="hint" id="recibo-datos"></p>
+    <table style="margin-top:.6rem;">
+      <thead><tr><th>Material</th><th>Kg</th><th>$/kg</th><th>Subtotal</th></tr></thead>
+      <tbody id="recibo-detalle"></tbody>
+    </table>
+    <p style="margin-top:.9rem;text-align:right;">Total a pagar: <span class="total num" id="recibo-total">$0</span></p>
+    <p class="hint" id="recibo-pago-info"></p>
+    <p class="hint" id="recibo-firma"></p>
     <div class="fila-acciones">
+      <button class="accion" onclick="descargarReciboJson()">⬇ Descargar JSON</button>
       <button class="accion" onclick="cerrarModal('modal-recibo')">Cerrar</button>
       <button class="accion primario" id="btn-pagar" style="display:none" onclick="autorizarPago()">💵 Autorizar desembolso</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal elegir módulo (window.prompt no existe en Electron) -->
+<div class="modal-fondo" id="modal-modulo">
+  <div class="modal">
+    <h3>¿A qué módulo llamar el turno?</h3>
+    <div id="botones-modulo" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.6rem;"></div>
+    <div class="fila-acciones"><button class="accion" onclick="cerrarModal('modal-modulo')">Cancelar</button></div>
   </div>
 </div>
 
@@ -221,13 +269,24 @@ async function cargarTurnos() {
   }).join('') : '<tr><td colspan="6">No hay turnos registrados hoy.</td></tr>';
 }
 
-async function llamar(id) {
+// window.prompt() no existe en Electron: se usa un modal con botones por módulo
+let turnoALlamar = null;
+
+function llamar(id) {
+  turnoALlamar = id;
   const max = Number(config.num_modulos) || 3;
-  const mod = prompt(`¿A qué módulo? (1-${max})`, '1');
-  if (mod === null) return;
-  const m = Number(mod);
-  if (!(m >= 1 && m <= max)) return alert(`Módulo inválido (1-${max})`);
-  await api(`/api/turnos/${id}/estado`, { method: 'PUT', body: JSON.stringify({ estado: 'LLAMADO', modulo_asignado: m }) });
+  $('botones-modulo').innerHTML = Array.from({ length: max }, (_, i) =>
+    `<button class="accion primario" style="font-size:1.2rem;padding:.7rem 1.4rem;"
+       onclick="confirmarLlamado(${i + 1})">Módulo ${i + 1}</button>`).join('');
+  $('modal-modulo').classList.add('abierto');
+}
+
+async function confirmarLlamado(modulo) {
+  cerrarModal('modal-modulo');
+  await api(`/api/turnos/${turnoALlamar}/estado`, {
+    method: 'PUT',
+    body: JSON.stringify({ estado: 'LLAMADO', modulo_asignado: modulo }),
+  });
 }
 
 async function noPresentado(id) {
@@ -278,16 +337,42 @@ async function registrarPesaje() {
 }
 
 let reciboActualId = null;
+let reciboActual = null;
 
 function pintarRecibo(recibo) {
   reciboActualId = recibo.turno_id;
-  $('recibo-json').textContent = JSON.stringify(recibo, null, 2);
+  reciboActual = recibo;
+  $('recibo-turno').textContent = pad(recibo.numero_turno);
+  $('recibo-datos').textContent =
+    `${recibo.usuario.tipo_documento} ${recibo.usuario.numero_documento} · ` +
+    `${new Date(recibo.fecha).toLocaleString('es-CO')}`;
+  $('recibo-detalle').innerHTML = (recibo.detalle || []).map(d => `<tr>
+    <td>${d.material}</td>
+    <td class="num">${d.kg}</td>
+    <td class="num">${fmt(d.precio_unitario)}</td>
+    <td class="num">${fmt(d.total)}</td>
+  </tr>`).join('') || '<tr><td colspan="4">Sin pesajes registrados.</td></tr>';
+  $('recibo-total').textContent = fmt(recibo.total);
   const pagado = !!recibo.pagado;
   $('recibo-estado-pago').innerHTML = pagado
     ? '<span class="badge FINALIZADO">PAGADO ✓</span>'
     : '<span class="badge LLAMADO">PENDIENTE DE PAGO</span>';
+  $('recibo-pago-info').textContent = pagado
+    ? `Desembolso autorizado por "${recibo.autorizado_por}" el ${new Date(recibo.fecha_pago).toLocaleString('es-CO')}`
+    : '';
+  $('recibo-firma').textContent = `Firma HMAC-SHA256: ${(recibo.firma || '').slice(0, 24)}…`;
   $('btn-pagar').style.display = pagado ? 'none' : 'inline-block';
   $('modal-recibo').classList.add('abierto');
+}
+
+function descargarReciboJson() {
+  if (!reciboActual) return;
+  const blob = new Blob([JSON.stringify(reciboActual, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `recibo-turno-${pad(reciboActual.numero_turno)}-${reciboActual.fecha_turno || ''}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 async function finalizarTurno() {
@@ -330,11 +415,16 @@ async function crearTurnoManual() {
 async function cargarMateriales() {
   materiales = await api('/api/materiales');
   $('cuerpo-materiales').innerHTML = materiales.map(m => `<tr>
-    <td>${m.familia}</td><td>${m.subcategoria}</td><td>${m.presentacion}</td>
+    <td><input id="mf-${m.id}" value="${m.familia}"></td>
+    <td><input id="ms-${m.id}" value="${m.subcategoria}"></td>
+    <td><input id="mr-${m.id}" value="${m.presentacion}"></td>
     <td><input class="precio num" type="number" id="mp-${m.id}" value="${m.precio_promedio}"></td>
     <td><input class="precio num" type="number" id="mn-${m.id}" value="${m.precio_min}"></td>
     <td><input class="precio num" type="number" id="mx-${m.id}" value="${m.precio_max}"></td>
-    <td><button class="accion primario" onclick="guardarMaterial(${m.id})">Guardar</button></td>
+    <td style="white-space:nowrap;">
+      <button class="accion primario" onclick="guardarMaterial(${m.id})">Guardar</button>
+      <button class="accion peligro" onclick="eliminarMaterial(${m.id})">🗑</button>
+    </td>
   </tr>`).join('');
 }
 
@@ -342,6 +432,9 @@ async function guardarMaterial(id) {
   await api(`/api/materiales/${id}`, {
     method: 'PUT',
     body: JSON.stringify({
+      familia: $(`mf-${id}`).value.trim(),
+      subcategoria: $(`ms-${id}`).value.trim(),
+      presentacion: $(`mr-${id}`).value.trim(),
       precio_promedio: Number($(`mp-${id}`).value),
       precio_min: Number($(`mn-${id}`).value),
       precio_max: Number($(`mx-${id}`).value),
@@ -349,26 +442,56 @@ async function guardarMaterial(id) {
   });
 }
 
+async function agregarMaterial() {
+  const body = {
+    familia: $('nm-familia').value.trim(),
+    subcategoria: $('nm-sub').value.trim(),
+    presentacion: $('nm-pres').value.trim() || 'Suelto',
+    precio_promedio: Number($('nm-prom').value),
+    precio_min: Number($('nm-min').value) || undefined,
+    precio_max: Number($('nm-max').value) || undefined,
+  };
+  if (!body.familia || !body.subcategoria || !(body.precio_promedio > 0)) {
+    return alert('Familia, subcategoría y precio promedio son obligatorios.');
+  }
+  await api('/api/materiales', { method: 'POST', body: JSON.stringify(body) });
+  for (const id of ['nm-familia', 'nm-sub', 'nm-pres', 'nm-prom', 'nm-min', 'nm-max']) $(id).value = '';
+  await cargarMateriales();
+}
+
+async function eliminarMaterial(id) {
+  if (!confirm('¿Eliminar este material? Si tiene pesajes históricos solo se ocultará de las listas.')) return;
+  await api(`/api/materiales/${id}`, { method: 'DELETE' });
+  await cargarMateriales();
+}
+
 // ---- Config ----
+function pintarPines() {
+  const p = config.pines_sesion || {};
+  const nombres = { pesaje: '⚖️ Pesaje', admin: '💵 Administrador', kiosko: '📺 Kiosko (TV)' };
+  $('cuerpo-pines').innerHTML = Object.keys(nombres).map(rol => `<tr>
+    <td>${nombres[rol]}</td>
+    <td><b style="font-size:1.2rem;letter-spacing:.15em;">${p[rol] || '—'}</b></td>
+  </tr>`).join('');
+  $('conexion').innerHTML =
+    `Servidor: <b>http://${config.ip}:${config.puerto}</b> &nbsp;|&nbsp; ` +
+    `PIN sesión — pesaje: <b>${p.pesaje}</b> · admin: <b>${p.admin}</b> · kiosko: <b>${p.kiosko}</b>`;
+}
+
 async function cargarConfig() {
   config = await api('/api/config');
   $('cfg-nombre').value = config.nombre_centro || '';
-  $('cfg-pin').value = config.pin_emparejamiento || '';
-  $('cfg-pin-pesaje').value = config.pin_pesaje || '';
-  $('cfg-pin-admin').value = config.pin_admin || '';
   $('cfg-timeout').value = config.timeout_minutos || 5;
   $('cfg-modulos').value = config.num_modulos || 3;
-  $('conexion').innerHTML =
-    `Servidor: <b>http://${config.ip}:${config.puerto}</b> &nbsp;|&nbsp; ` +
-    `PIN cliente: <b>${config.pin_emparejamiento}</b> · pesaje: <b>${config.pin_pesaje}</b> · admin: <b>${config.pin_admin}</b>`;
+  pintarPines();
   $('instrucciones-app').innerHTML =
     `La app Android <b>detecta este servidor automáticamente</b> (misma red WiFi o hotspot de este equipo). ` +
-    `Al abrirla, cada dispositivo elige su rol e ingresa el PIN correspondiente:<br>` +
-    `&nbsp;• <b>Cliente</b> (vende material): PIN <b>${config.pin_emparejamiento}</b><br>` +
-    `&nbsp;• <b>Pesaje</b> (registra kilos y valor): PIN <b>${config.pin_pesaje}</b><br>` +
-    `&nbsp;• <b>Administrador</b> (autoriza desembolsos): PIN <b>${config.pin_admin}</b><br>` +
-    `&nbsp;• <b>Modo Kiosko</b> (TV con el turnero): no requiere PIN.<br>` +
+    `Al abrirla, cada dispositivo elige su rol:<br>` +
+    `&nbsp;• <b>Cliente</b>: conecta sin PIN, se identifica con su documento.<br>` +
+    `&nbsp;• <b>Pesaje / Administrador / Kiosko</b>: ingresan una sola vez el PIN de sesión de arriba ` +
+    `y quedan emparejados hasta que revoques su acceso.<br>` +
     `Si la detección automática falla, la IP es <b>${config.ip}</b> y el puerto <b>${config.puerto}</b>.`;
+  await cargarDispositivos();
 }
 
 async function guardarConfig() {
@@ -376,15 +499,38 @@ async function guardarConfig() {
     method: 'PUT',
     body: JSON.stringify({
       nombre_centro: $('cfg-nombre').value.trim(),
-      pin_emparejamiento: $('cfg-pin').value.trim(),
-      pin_pesaje: $('cfg-pin-pesaje').value.trim(),
-      pin_admin: $('cfg-pin-admin').value.trim(),
       timeout_minutos: Number($('cfg-timeout').value) || 5,
       num_modulos: Number($('cfg-modulos').value) || 3,
     }),
   });
   await cargarConfig();
   alert('Configuración guardada.');
+}
+
+async function regenerarPines() {
+  if (!confirm('¿Generar nuevos PINs de sesión? Los PINs actuales dejarán de servir para emparejar (los dispositivos ya emparejados no se afectan).')) return;
+  const r = await api('/api/config/regenerar-pines', { method: 'POST' });
+  config.pines_sesion = r.pines_sesion;
+  pintarPines();
+}
+
+async function cargarDispositivos() {
+  const dispositivos = await api('/api/dispositivos');
+  const roles = { pesaje: '⚖️ Pesaje', admin: '💵 Admin', kiosko: '📺 Kiosko' };
+  $('cuerpo-dispositivos').innerHTML = dispositivos.length ? dispositivos.map(d => `<tr>
+    <td>${d.nombre || 'dispositivo'}</td>
+    <td>${roles[d.rol] || d.rol}</td>
+    <td>${new Date(d.creado).toLocaleString('es-CO')}</td>
+    <td>${d.ultimo_acceso ? new Date(d.ultimo_acceso).toLocaleString('es-CO') : '—'}</td>
+    <td>${d.activo ? '<span class="badge ESPERANDO">ACTIVO</span>' : '<span class="badge NO_PRESENTADO">REVOCADO</span>'}</td>
+    <td>${d.activo ? `<button class="accion peligro" onclick="revocarDispositivo(${d.id})">Revocar</button>` : ''}</td>
+  </tr>`).join('') : '<tr><td colspan="6">Aún no hay dispositivos emparejados.</td></tr>';
+}
+
+async function revocarDispositivo(id) {
+  if (!confirm('¿Revocar el acceso de este dispositivo? Dejará de funcionar de inmediato.')) return;
+  await api(`/api/dispositivos/${id}/revocar`, { method: 'POST' });
+  await cargarDispositivos();
 }
 
 function cerrarModal(id) { $(id).classList.remove('abierto'); cargarTurnos(); }
@@ -396,6 +542,7 @@ function conectarWS() {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'turnos_updated') cargarTurnos();
     if (msg.type === 'materiales_updated') cargarMateriales();
+    if (msg.type === 'dispositivos_updated') cargarDispositivos();
   };
   ws.onclose = () => setTimeout(conectarWS, 3000);
 }

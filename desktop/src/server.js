@@ -51,31 +51,32 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
     }
   }
 
-  // ---- Guards por rol ----
-  // Cada rol tiene su PIN (configurable en el panel). El PIN de administrador
-  // habilita cualquier operación; las rutas locales del panel no requieren PIN.
-  const rolDePin = (pin) => {
-    if (!pin) return null;
-    if (pin === db.getConfig('pin_admin')) return 'admin';
-    if (pin === db.getConfig('pin_pesaje')) return 'pesaje';
-    if (pin === db.getConfig('pin_emparejamiento')) return 'cliente';
-    return null;
+  // ---- Seguridad: PINs de sesión + tokens de dispositivo ----
+  // Los roles elevados (pesaje, admin, kiosko) se emparejan con un PIN aleatorio
+  // que se genera en cada arranque del servidor y se muestra en el panel.
+  // El emparejamiento entrega un token persistente por dispositivo, revocable
+  // desde el panel. El rol cliente no requiere PIN: se identifica con su documento.
+  const generarPin = () => String(Math.floor(100000 + Math.random() * 900000));
+  const pinsSesion = { pesaje: generarPin(), admin: generarPin(), kiosko: generarPin() };
+  const regenerarPins = () => {
+    for (const rol of Object.keys(pinsSesion)) pinsSesion[rol] = generarPin();
   };
+
+  const dispositivoDe = (req) => db.dispositivoPorToken(req.get('X-TOKEN'));
   const soloAdmin = (req, res, next) => {
     if (!esLocalhost(req)) return res.status(403).json({ error: 'Solo disponible desde el equipo servidor' });
     next();
   };
-  const conRol = (...roles) => (req, res, next) => {
+  const conToken = (...roles) => (req, res, next) => {
     if (esLocalhost(req)) return next();
-    const rol = rolDePin(req.get('X-PIN'));
-    if (rol === 'admin' || roles.includes(rol)) return next();
-    return res.status(401).json({ error: 'PIN inválido para esta operación' });
+    const disp = dispositivoDe(req);
+    if (disp && (disp.rol === 'admin' || roles.includes(disp.rol))) return next();
+    return res.status(401).json({ error: 'Dispositivo no autorizado o acceso revocado' });
   };
-  const conPin = conRol('cliente', 'pesaje');
   const esOperador = (req) => {
     if (esLocalhost(req)) return true;
-    const rol = rolDePin(req.get('X-PIN'));
-    return rol === 'admin' || rol === 'pesaje';
+    const disp = dispositivoDe(req);
+    return !!disp && (disp.rol === 'admin' || disp.rol === 'pesaje');
   };
 
   // ---- Páginas ----
@@ -85,28 +86,71 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
   app.get('/display', (_req, res) => res.redirect('/display.html'));
 
   // ---- API ----
-  // Ping público (usado por el kiosko y el autodescubrimiento); si trae un PIN
-  // válido devuelve el rol correspondiente, para que la app valide el emparejamiento.
+  // Ping público; con token de dispositivo devuelve su rol (la app lo usa para
+  // validar el emparejamiento y detectar revocaciones).
   app.get('/api/ping', (req, res) => {
-    const rol = esLocalhost(req) ? 'admin' : rolDePin(req.get('X-PIN'));
+    const disp = dispositivoDe(req);
+    const rol = esLocalhost(req) ? 'admin' : (disp ? disp.rol : 'cliente');
     res.json({
       ok: true,
       nombre: db.getConfig('nombre_centro'),
       version: require('../package.json').version,
-      rol: rol || 'kiosko',
+      rol,
+    });
+  });
+
+  // Emparejamiento de roles elevados: PIN de sesión -> token persistente
+  app.post('/api/emparejar', (req, res) => {
+    const { rol, pin, nombre } = req.body || {};
+    if (!['pesaje', 'admin', 'kiosko'].includes(rol)) {
+      return res.status(400).json({ error: 'rol debe ser pesaje, admin o kiosko' });
+    }
+    if (String(pin) !== pinsSesion[rol]) {
+      return res.status(401).json({ error: 'PIN de emparejamiento incorrecto para ese rol' });
+    }
+    const disp = db.crearDispositivo(rol, String(nombre || 'dispositivo').slice(0, 60));
+    broadcast('dispositivos_updated');
+    res.status(201).json({
+      token: disp.token,
+      rol: disp.rol,
+      nombre_centro: db.getConfig('nombre_centro'),
     });
   });
 
   app.get('/api/materiales', (_req, res) => res.json(db.getMateriales()));
 
-  app.put('/api/materiales/:id', conRol(), (req, res) => {
+  app.put('/api/materiales/:id', conToken(), (req, res) => {
     const m = db.updateMaterial(Number(req.params.id), req.body || {});
     if (!m) return res.status(400).json({ error: 'Nada que actualizar o material inexistente' });
     broadcast('materiales_updated');
     res.json(m);
   });
 
-  app.post('/api/turnos', conPin, (req, res) => {
+  app.post('/api/materiales', conToken(), (req, res) => {
+    const { familia, subcategoria, presentacion, precio_promedio, precio_min, precio_max } = req.body || {};
+    if (!familia || !subcategoria || !presentacion || !(Number(precio_promedio) > 0)) {
+      return res.status(400).json({ error: 'familia, subcategoria, presentacion y precio_promedio (> 0) son obligatorios' });
+    }
+    const m = db.crearMaterial({
+      familia: String(familia).trim(),
+      subcategoria: String(subcategoria).trim(),
+      presentacion: String(presentacion).trim(),
+      precio_promedio: Number(precio_promedio),
+      precio_min: Number(precio_min) > 0 ? Number(precio_min) : Number(precio_promedio),
+      precio_max: Number(precio_max) > 0 ? Number(precio_max) : Number(precio_promedio),
+    });
+    broadcast('materiales_updated');
+    res.status(201).json(m);
+  });
+
+  app.delete('/api/materiales/:id', conToken(), (req, res) => {
+    const r = db.eliminarMaterial(Number(req.params.id));
+    broadcast('materiales_updated');
+    res.json(r);
+  });
+
+  // El cliente no requiere PIN: se identifica con su documento
+  app.post('/api/turnos', (req, res) => {
     const { tipo_documento, numero_documento, material_id } = req.body || {};
     if (!TIPOS_DOC.includes(tipo_documento)) {
       return res.status(400).json({ error: `tipo_documento debe ser uno de: ${TIPOS_DOC.join(', ')}` });
@@ -130,13 +174,13 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
     res.json(turnos.map(t => ({ ...t, numero_documento: enmascarar(t.numero_documento) })));
   });
 
-  app.get('/api/turnos/:id', conPin, (req, res) => {
+  app.get('/api/turnos/:id', (req, res) => {
     const t = db.turnoCompleto(Number(req.params.id));
     if (!t) return res.status(404).json({ error: 'Turno no encontrado' });
     res.json(t);
   });
 
-  app.put('/api/turnos/:id/estado', conRol('pesaje'), (req, res) => {
+  app.put('/api/turnos/:id/estado', conToken('pesaje'), (req, res) => {
     const { estado, modulo_asignado } = req.body || {};
     if (!ESTADOS.includes(estado)) {
       return res.status(400).json({ error: `estado debe ser uno de: ${ESTADOS.join(', ')}` });
@@ -147,7 +191,7 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
     res.json(t);
   });
 
-  app.post('/api/pesaje', conRol('pesaje'), (req, res) => {
+  app.post('/api/pesaje', conToken('pesaje'), (req, res) => {
     const { turno_id, material_id, peso_kg, usuario_pesador } = req.body || {};
     const kg = Number(peso_kg);
     if (!turno_id || !material_id || !(kg > 0)) {
@@ -166,11 +210,11 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
     }
   });
 
-  app.get('/api/pesajes/:turno_id', conRol('pesaje'), (req, res) => {
+  app.get('/api/pesajes/:turno_id', conToken('pesaje'), (req, res) => {
     res.json(db.getPesajes(Number(req.params.turno_id)));
   });
 
-  app.post('/api/turnos/:id/finalizar', conRol('pesaje'), (req, res) => {
+  app.post('/api/turnos/:id/finalizar', conToken('pesaje'), (req, res) => {
     const id = Number(req.params.id);
     const recibo = db.generarRecibo(id);
     if (!recibo) return res.status(404).json({ error: 'Turno no encontrado' });
@@ -179,38 +223,60 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
     res.json(recibo);
   });
 
-  app.get('/api/recibos/:turno_id', conPin, (req, res) => {
+  app.get('/api/recibos/:turno_id', (req, res) => {
     const r = db.getRecibo(Number(req.params.turno_id));
     if (!r) return res.status(404).json({ error: 'Recibo no disponible' });
     res.json(r);
   });
 
   // Lista de recibos (rol administrador): ?pendientes=1 para los no pagados
-  app.get('/api/recibos', conRol(), (req, res) => {
+  app.get('/api/recibos', conToken(), (req, res) => {
     res.json(db.getRecibos({ pendientes: req.query.pendientes === '1' }));
   });
 
   // Autorizar desembolso del efectivo (rol administrador)
-  app.post('/api/recibos/:turno_id/pagar', conRol(), (req, res) => {
+  app.post('/api/recibos/:turno_id/pagar', conToken(), (req, res) => {
     const r = db.pagarRecibo(Number(req.params.turno_id), (req.body || {}).autorizado_por || 'admin');
     if (r.error) return res.status(400).json(r);
     broadcast('turnos_updated');
     res.json(r);
   });
 
+  // Historial de pagos del propio cliente (se consulta por documento)
+  app.get('/api/historial', (req, res) => {
+    const { tipo_documento, numero_documento } = req.query;
+    if (!TIPOS_DOC.includes(tipo_documento) || !numero_documento) {
+      return res.status(400).json({ error: 'tipo_documento y numero_documento son obligatorios' });
+    }
+    res.json(db.getPagosDeUsuario(tipo_documento, String(numero_documento)));
+  });
+
+  // ---- Gestión de dispositivos emparejados (solo panel local) ----
+  app.get('/api/dispositivos', soloAdmin, (_req, res) => res.json(db.getDispositivos()));
+
+  app.post('/api/dispositivos/:id/revocar', soloAdmin, (req, res) => {
+    res.json(db.revocarDispositivo(Number(req.params.id)));
+    broadcast('dispositivos_updated');
+  });
+
+  app.post('/api/config/regenerar-pines', soloAdmin, (_req, res) => {
+    regenerarPins();
+    res.json({ pines_sesion: pinsSesion });
+  });
+
   app.get('/api/config', soloAdmin, (_req, res) => {
-    const { secreto_firma, ...pub } = db.allConfig();
-    res.json({ ...pub, ip: ipLocal(), puerto });
+    const { secreto_firma, pin_emparejamiento, pin_pesaje, pin_admin, ...pub } = db.allConfig();
+    res.json({ ...pub, ip: ipLocal(), puerto, pines_sesion: pinsSesion });
   });
 
   app.put('/api/config', soloAdmin, (req, res) => {
-    const permitidas = ['pin_emparejamiento', 'pin_pesaje', 'pin_admin', 'timeout_minutos', 'num_modulos', 'nombre_centro'];
+    const permitidas = ['timeout_minutos', 'num_modulos', 'nombre_centro'];
     for (const k of permitidas) {
       if (req.body[k] !== undefined) db.setConfig(k, req.body[k]);
     }
     broadcast('config_updated');
-    const { secreto_firma, ...pub } = db.allConfig();
-    res.json({ ...pub, ip: ipLocal(), puerto });
+    const { secreto_firma, pin_emparejamiento, pin_pesaje, pin_admin, ...pub } = db.allConfig();
+    res.json({ ...pub, ip: ipLocal(), puerto, pines_sesion: pinsSesion });
   });
 
   // Timeout de ausencias: LLAMADO -> NO_PRESENTADO
@@ -222,7 +288,8 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
 
   // Autodescubrimiento: la app Android envía "RECICLAJE_DISCOVER" por broadcast UDP
   // al puerto 18300 y el servidor responde con su IP, puerto y nombre.
-  const udp = dgram.createSocket('udp4');
+  // reuseAddr: permite convivir con otra instancia (los broadcasts llegan a ambas)
+  const udp = dgram.createSocket({ type: 'udp4', reuseAddr: true });
   udp.on('message', (msg, rinfo) => {
     if (!msg.toString().startsWith('RECICLAJE_DISCOVER')) return;
     const respuesta = JSON.stringify({
