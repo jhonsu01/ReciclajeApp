@@ -4,6 +4,29 @@ Todas las novedades relevantes de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.4.0] - 2026-07-02
+
+### Corregido
+
+- **Turno duplicado con pago pendiente**: un cliente con turno FINALIZADO pero sin pagar
+  podía sacar otro turno con el mismo documento. Ahora ese turno cuenta como abierto:
+  al volver a solicitar, la app retoma el turno pendiente en vez de crear uno nuevo.
+- **Textos cortados en la app** (roles pesaje y administrador): las listas ahora usan
+  tarjetas verticales con el documento completo, el total en grande y botón de ancho completo.
+
+### Añadido
+
+- **Estado de pago visible en el panel**: los turnos finalizados se muestran como
+  "POR PAGAR 💵" o "PAGADO ✓", con botón directo "Ver y pagar".
+- **Filtros en la tabla de turnos**: búsqueda por documento o número de turno, filtro por
+  estado (incluye "Por pagar") y selector de fecha para consultar días anteriores.
+- **Columnas Registro y Atención**: hora de registro del turno y hora en que fue llamado.
+- **Historial del cliente con pendientes**: separa "⏳ Pendientes de pago" (con total por
+  cobrar) de "✅ Pagados" (con total recibido).
+- **Marquesina configurable**: velocidad de desplazamiento ajustable y mensaje
+  personalizado (teléfonos, avisos) que aparece a continuación de la lista completa de
+  precios en las pantallas y el modo kiosko.
+
 ## [0.3.0] - 2026-07-02
 
 ### Corregido
