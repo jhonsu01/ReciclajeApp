@@ -497,24 +497,40 @@ class MainActivity : AppCompatActivity() {
         }
         io.execute {
             try {
-                val pagos = cliente.historial(tipoDoc, numeroDoc)
+                val recibos = cliente.historial(tipoDoc, numeroDoc)
                 ui.post {
-                    val sb = StringBuilder()
-                    var total = 0L
-                    for (i in 0 until pagos.length()) {
-                        val p = pagos.getJSONObject(i)
-                        total += p.getLong("total")
-                        sb.append("• Turno %03d (%s): $%s\n".format(
+                    val pendientes = StringBuilder()
+                    val pagados = StringBuilder()
+                    var totalPendiente = 0L
+                    var totalRecibido = 0L
+                    for (i in 0 until recibos.length()) {
+                        val p = recibos.getJSONObject(i)
+                        val linea = "• Turno %03d (%s): $%s\n".format(
                             p.getInt("numero_turno"),
                             p.optString("fecha_turno", ""),
-                            formato(p.getLong("total"))))
+                            formato(p.getLong("total")))
+                        if (p.optBoolean("pagado")) {
+                            totalRecibido += p.getLong("total")
+                            pagados.append(linea)
+                        } else {
+                            totalPendiente += p.getLong("total")
+                            pendientes.append(linea)
+                        }
                     }
-                    val mensaje = if (pagos.length() == 0)
-                        "Aún no tienes pagos registrados con el documento $tipoDoc $numeroDoc."
-                    else
-                        sb.append("\nTotal recibido: $${formato(total)}").toString()
+                    val sb = StringBuilder()
+                    if (pendientes.isNotEmpty()) {
+                        sb.append("⏳ PENDIENTES DE PAGO\n").append(pendientes)
+                        sb.append("Por cobrar: $${formato(totalPendiente)}\n\n")
+                    }
+                    if (pagados.isNotEmpty()) {
+                        sb.append("✅ PAGADOS\n").append(pagados)
+                        sb.append("Total recibido: $${formato(totalRecibido)}")
+                    }
+                    val mensaje = if (recibos.length() == 0)
+                        "Aún no tienes recibos registrados con el documento $tipoDoc $numeroDoc."
+                    else sb.toString().trim()
                     AlertDialog.Builder(this)
-                        .setTitle("🧾 Mis pagos ($tipoDoc $numeroDoc)")
+                        .setTitle("🧾 Mis recibos ($tipoDoc $numeroDoc)")
                         .setMessage(mensaje)
                         .setPositiveButton("Cerrar", null)
                         .show()
@@ -554,36 +570,43 @@ class MainActivity : AppCompatActivity() {
             val estado = t.getString("estado")
             if (estado == "FINALIZADO" || estado == "NO_PRESENTADO") continue
             visibles++
-            val fila = LinearLayout(this)
-            fila.orientation = LinearLayout.HORIZONTAL
-            fila.setBackgroundColor(getColor(R.color.panel))
-            fila.setPadding(24, 24, 24, 24)
+            // Tarjeta vertical: el texto no se corta con el botón
+            val tarjeta = LinearLayout(this)
+            tarjeta.orientation = LinearLayout.VERTICAL
+            tarjeta.setBackgroundColor(getColor(R.color.panel))
+            tarjeta.setPadding(28, 24, 28, 24)
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            lp.bottomMargin = 12
-            fila.layoutParams = lp
+            lp.bottomMargin = 14
+            tarjeta.layoutParams = lp
 
             val info = TextView(this)
-            info.text = "Turno %03d · %s %s\n%s".format(
-                t.getInt("numero"), t.getString("tipo_documento"),
-                t.getString("numero_documento"), estado.replace('_', ' '))
+            info.text = "Turno %03d · %s %s".format(
+                t.getInt("numero"), t.getString("tipo_documento"), t.getString("numero_documento"))
             info.setTextColor(getColor(R.color.texto))
-            info.textSize = 15f
-            info.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            fila.addView(info)
+            info.textSize = 16f
+            tarjeta.addView(info)
+
+            val estadoTxt = TextView(this)
+            estadoTxt.text = estado.replace('_', ' ')
+            estadoTxt.setTextColor(getColor(if (estado == "ESPERANDO") R.color.verde else R.color.amarillo))
+            estadoTxt.textSize = 13f
+            tarjeta.addView(estadoTxt)
 
             val boton = Button(this)
+            boton.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             if (estado == "ESPERANDO") {
-                boton.text = "Llamar"
+                boton.text = "📣 Llamar"
                 boton.setOnClickListener { dialogoLlamar(t.getLong("id")) }
             } else {
-                boton.text = "Pesar"
+                boton.text = "⚖️ Pesar"
                 boton.setBackgroundColor(getColor(R.color.amarillo))
                 boton.setTextColor(getColor(R.color.fondo))
                 boton.setOnClickListener { abrirDetallePesaje(t) }
             }
-            fila.addView(boton)
-            contenedor.addView(fila)
+            tarjeta.addView(boton)
+            contenedor.addView(tarjeta)
         }
         if (visibles == 0) {
             val vacio = TextView(this)
@@ -736,29 +759,38 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until recibos.length()) {
             val r = recibos.getJSONObject(i)
             val u = r.getJSONObject("usuario")
-            val fila = LinearLayout(this)
-            fila.orientation = LinearLayout.HORIZONTAL
-            fila.setBackgroundColor(getColor(R.color.panel))
-            fila.setPadding(24, 24, 24, 24)
+            // Tarjeta vertical: nada se corta aunque el documento o el total sean largos
+            val tarjeta = LinearLayout(this)
+            tarjeta.orientation = LinearLayout.VERTICAL
+            tarjeta.setBackgroundColor(getColor(R.color.panel))
+            tarjeta.setPadding(28, 24, 28, 24)
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            lp.bottomMargin = 12
-            fila.layoutParams = lp
+            lp.bottomMargin = 14
+            tarjeta.layoutParams = lp
 
-            val info = TextView(this)
-            info.text = "Turno %03d · %s %s\nTotal: $%s".format(
-                r.getInt("numero_turno"), u.getString("tipo_documento"),
-                u.getString("numero_documento"), formato(r.getLong("total")))
-            info.setTextColor(getColor(R.color.texto))
-            info.textSize = 15f
-            info.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            fila.addView(info)
+            val titulo = TextView(this)
+            titulo.text = "Turno %03d · %s %s".format(
+                r.getInt("numero_turno"), u.getString("tipo_documento"), u.getString("numero_documento"))
+            titulo.setTextColor(getColor(R.color.texto))
+            titulo.textSize = 16f
+            tarjeta.addView(titulo)
+
+            val total = TextView(this)
+            total.text = "$${formato(r.getLong("total"))}"
+            total.setTextColor(getColor(R.color.verde))
+            total.textSize = 28f
+            total.setTypeface(null, android.graphics.Typeface.BOLD)
+            tarjeta.addView(total)
 
             val boton = Button(this)
-            boton.text = "💵 Pagar"
+            boton.text = "💵 Autorizar desembolso"
+            boton.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             boton.setOnClickListener { dialogoPagar(r) }
-            fila.addView(boton)
-            contenedor.addView(fila)
+            tarjeta.addView(boton)
+
+            contenedor.addView(tarjeta)
         }
     }
 
