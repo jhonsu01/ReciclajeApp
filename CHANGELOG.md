@@ -4,6 +4,32 @@ Todas las novedades relevantes de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.2.0] - 2026-07-01
+
+### Añadido
+
+- **Autodescubrimiento del servidor**: la app Android encuentra el servidor automáticamente
+  por broadcast UDP (puerto 18300) — ya no es necesario escribir la IP.
+- **Selección de rol al emparejar** en la app Android:
+  - 👤 **Cliente** (vende material): flujo de turno con QR + PIN, como antes.
+  - ⚖️ **Pesaje**: estación móvil que llama turnos, registra peso, ve el valor generado
+    y finaliza con recibo.
+  - 💵 **Administrador**: lista de recibos pendientes y **autorización de desembolso**
+    del efectivo desde el teléfono.
+  - 📺 **Modo Kiosko**: pantalla del turnero a pantalla completa para TVs Android,
+    sin configurar IP ni PIN (detección automática + reconexión sola).
+- **PINs separados por rol** (cliente / pesaje / administrador), configurables en el panel.
+- **Estado de pago en los recibos** (`pagado`, `autorizado_por`, `fecha_pago`), con botón
+  "Autorizar desembolso" también en el panel de escritorio.
+- Compatibilidad con Android TV (categoría Leanback, ícono banner, funciona sin pantalla táctil).
+
+### Cambiado
+
+- Las rutas de pesaje de la API ahora aceptan el PIN de pesaje desde la red local
+  (antes solo funcionaban desde el equipo servidor).
+- Los operadores (pesaje/admin) ven el documento completo del turno; el público lo ve enmascarado.
+- La ventana de escritorio ya no muestra la barra de menú de Electron.
+
 ## [0.1.0] - 2026-07-01
 
 ### Añadido
