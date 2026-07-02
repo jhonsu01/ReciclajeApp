@@ -5,86 +5,104 @@ Sistema de gestión de reciclaje con turnero inteligente, **offline-first** y de
 | Componente | Tecnología | Entregable |
 | --- | --- | --- |
 | 🖥️ Escritorio (servidor + panel admin) | Electron + Express + WebSocket + SQLite | Instalador **MSI** |
-| 📱 Cliente reciclador | Android (Kotlin) | **APK** |
-| 📺 Pantallas informativas | Web en modo oscuro (`/display.html`) | Servida por el escritorio |
+| 📱 App móvil multirol (cliente / pesaje / admin / kiosko) | Android (Kotlin) | **APK** |
+| 📺 Pantallas informativas | Web en modo oscuro (`/display.html`) con marquesina configurable | Servida por el escritorio |
 
 Los instaladores se publican automáticamente en la sección **[Releases](../../releases)** de este repositorio.
 
 ## Arquitectura
 
 ```
-[APP ANDROID] ←— WiFi local + PIN —→ [SERVIDOR LOCAL (DESKTOP)]
-                                            │  API REST + WebSocket + SQLite
-                                            ▼
-                                  [PANTALLAS TURNERO /display.html]
+[APP ANDROID] ←— WiFi local (autodescubrimiento UDP) —→ [SERVIDOR LOCAL (DESKTOP)]
+                                                              │  API REST + WebSocket + SQLite
+                                                              ▼
+                                                  [PANTALLAS / TV EN MODO KIOSKO]
 ```
 
-- **Offline-first**: todo funciona en red local, sin internet. La app Android encola la
-  solicitud y reintenta automáticamente si pierde conexión.
-- **Emparejamiento por PIN**: los clientes móviles se autentican con el PIN configurado
-  en el panel de administración (header `X-PIN`).
-- **Seguridad**: las rutas administrativas solo aceptan conexiones desde el propio equipo
-  servidor; los recibos se firman con HMAC-SHA256; el número de documento se enmascara en
-  las respuestas públicas del turnero.
+- **Offline-first**: todo funciona en red local, sin internet. La app encola la solicitud
+  y reintenta automáticamente si pierde conexión.
+- **Autodescubrimiento**: la app encuentra el servidor sola por broadcast UDP (puerto 18300);
+  no hay que escribir la IP.
+- **Recibos firmados** con HMAC-SHA256 y descargables en JSON desde el panel.
 
-## Instalación
+## Roles de la app Android
 
-1. Descarga desde [Releases](../../releases):
-   - `ReciclajeTurnero-X.Y.Z.msi` → instálalo en el PC Windows (servidor).
-   - `ReciclajeTurnero-vX.Y.Z.apk` → instálalo en los teléfonos Android (permite orígenes desconocidos).
-2. Abre **Reciclaje Turnero** en el PC. En el encabezado del panel verás la IP del servidor
-   y el PIN de emparejamiento.
-3. En el teléfono (misma red WiFi o hotspot del PC): ingresa IP, puerto (3000) y PIN.
-4. En las pantallas informativas abre `http://IP_DEL_SERVIDOR:3000/display.html`
-   (Chromium en modo kiosk recomendado: `chrome --kiosk http://...`).
+Al abrir la app, cada dispositivo elige cómo se va a usar:
+
+| Rol | Emparejamiento | Qué hace |
+| --- | --- | --- |
+| 👤 **Cliente** | Sin PIN (se identifica con su documento) | Solicita turno (QR + PIN), vibra al ser llamado, ve su recibo, recibe la notificación de **pago** y consulta su historial (pendientes y pagados) |
+| ⚖️ **Pesaje** | PIN de sesión → token | Llama turnos al módulo, registra kilos con valor calculado en vivo y finaliza generando el recibo |
+| 💵 **Administrador** | PIN de sesión → token | Ve los recibos por pagar y **autoriza el desembolso** del efectivo |
+| 📺 **Modo Kiosko** | PIN de sesión → token (una sola vez) | Convierte un TV Android en la pantalla del turnero, a pantalla completa y con reconexión automática |
+
+## Seguridad
+
+- Los roles elevados se emparejan con **PINs de sesión aleatorios de 6 dígitos** que el
+  escritorio genera en cada arranque (visibles en el panel). El PIN se ingresa **una sola
+  vez por dispositivo**: el emparejamiento entrega un token persistente.
+- **Múltiples dispositivos** por rol, con lista en *Configuración → Dispositivos emparejados*
+  (último acceso visible) y **revocación inmediata** desde el panel.
+- Las rutas administrativas del panel solo aceptan conexiones desde el propio equipo servidor.
+- El documento del cliente se enmascara en las vistas públicas del turnero.
 
 ## Flujo del sistema
 
-1. **Registro**: el reciclador solicita turno desde la app (tipo y número de documento,
-   material opcional) → recibe número de turno, QR y PIN.
-2. **Visualización**: las pantallas muestran los turnos en espera y los llamados con su módulo.
-3. **Llamado**: el administrador llama al turno → el teléfono vibra y muestra el módulo.
-4. **Pesaje**: el pesador registra material y kilos (puede corregir el material declarado);
-   el sistema calcula el valor con los precios configurados.
-5. **Finalización**: se genera un recibo JSON firmado, visible en el panel y en la app.
-6. **Ausencias**: si el reciclador no se presenta en el tiempo configurado, el turno pasa a
-   NO_PRESENTADO automáticamente y sigue el siguiente.
+1. **Registro**: el cliente solicita turno (documento + material opcional) → número, QR y PIN.
+2. **Visualización**: pantallas/TV muestran la fila y los llamados con su módulo, más la
+   marquesina con precios y mensajes.
+3. **Llamado**: desde el panel o la app de pesaje → el teléfono del cliente vibra.
+4. **Pesaje**: se registran materiales y kilos (valor calculado con los precios configurados);
+   al finalizar se genera el recibo firmado.
+5. **Pago**: el administrador autoriza el desembolso → el cliente recibe "💵 ¡Pago recibido!"
+   y su turno se limpia. **Un turno sin pagar sigue abierto**: el mismo documento lo retoma,
+   no puede duplicar turno.
+6. **Ausencias**: timeout configurable → NO_PRESENTADO automático.
 
-## API REST local
+## Panel de administración (escritorio)
+
+- Turnos con **filtros** (documento/número, estado — incluye *Por pagar* —, fecha) y columnas
+  de hora de **registro** y **atención**.
+- Estado de pago visible: `POR PAGAR 💵` / `PAGADO ✓`, recibo en tabla legible con
+  botón **Descargar JSON** y autorización de desembolso.
+- **Materiales**: editar nombres y precios, agregar personalizados y eliminar
+  (13 materiales precargados con precios referenciales COP/kg de Mayo 2025).
+- **Marquesina**: velocidad de desplazamiento y mensaje personalizado (teléfonos, avisos)
+  que rota tras la lista completa de precios.
+
+## API REST local (resumen)
 
 | Método | Ruta | Acceso | Descripción |
 | --- | --- | --- | --- |
-| GET | `/api/ping` | PIN | Verificación de emparejamiento |
-| POST | `/api/turnos` | PIN | Crear turno |
-| GET | `/api/turnos` | Público* | Turnos del día (documento enmascarado) |
-| GET | `/api/turnos/:id` | PIN | Detalle y estado de un turno |
-| PUT | `/api/turnos/:id/estado` | Solo servidor | Cambiar estado / asignar módulo |
-| GET | `/api/materiales` | Público | Materiales y precios |
-| PUT | `/api/materiales/:id` | Solo servidor | Actualizar precios |
-| POST | `/api/pesaje` | Solo servidor | Registrar pesaje |
-| POST | `/api/turnos/:id/finalizar` | Solo servidor | Generar recibo y finalizar |
-| GET | `/api/recibos/:turno_id` | PIN | Recibo firmado |
-| GET/PUT | `/api/config` | Solo servidor | Configuración (PIN, timeout, módulos) |
+| GET | `/api/ping` | Público | Info del servidor; con token devuelve el rol del dispositivo |
+| POST | `/api/emparejar` | PIN de sesión | Empareja un dispositivo (pesaje/admin/kiosko) → token |
+| POST | `/api/turnos` | Público | Crear turno (retoma el abierto/pendiente de pago del mismo documento) |
+| GET | `/api/turnos` | Público* | Turnos del día (`?fecha=` histórico; documento enmascarado) |
+| GET | `/api/turnos/:id` | Público | Estado de un turno |
+| PUT | `/api/turnos/:id/estado` | Token pesaje | Llamar / cambiar estado / asignar módulo |
+| POST | `/api/pesaje` | Token pesaje | Registrar pesaje |
+| POST | `/api/turnos/:id/finalizar` | Token pesaje | Generar recibo firmado |
+| GET | `/api/recibos` | Token admin | Recibos (`?pendientes=1`) |
+| POST | `/api/recibos/:id/pagar` | Token admin | Autorizar desembolso |
+| GET | `/api/historial` | Público | Recibos del documento indicado (pendientes y pagados) |
+| GET/POST/PUT/DELETE | `/api/materiales` | GET público / resto token admin | Materiales y precios |
+| GET | `/api/display` | Público | Config de marquesina (velocidad, mensaje) |
+| GET/PUT | `/api/config`, `/api/dispositivos` | Solo servidor | Configuración y revocación de accesos |
 
-\* Pensado para las pantallas informativas. WebSocket en `/ws` para actualizaciones en vivo.
+\* Los operadores con token ven el documento completo. WebSocket en `/ws` para tiempo real.
 
 ## Desarrollo
 
-### Escritorio
-
 ```bash
+# Escritorio
 cd desktop
 npm install
-npm start            # ejecutar en desarrollo
-npm run dist         # generar el MSI (dist/ReciclajeTurnero-X.Y.Z.msi)
-node ../.ci/smoke-test.js   # smoke test de la API
-```
+npm start                    # desarrollo
+npm run dist                 # generar el MSI
+node ../.ci/smoke-test.js    # smoke test de la API (13 verificaciones)
 
-### Android
-
-```bash
+# Android
 cd android
-./gradlew assembleDebug      # APK de depuración
 ./gradlew assembleRelease    # APK firmado (app/build/outputs/apk/release/)
 ```
 
@@ -97,18 +115,12 @@ Cada push de un tag `v*` compila el MSI (Windows) y el APK (Linux) en GitHub Act
 adjunta a una Release con notas generadas automáticamente:
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.5.0
+git push origin main v0.5.0
 ```
 
-¿El tag no subió (GitHub Desktop)? Ejecuta el workflow **Release** manualmente desde la
-pestaña *Actions* indicando el tag deseado.
-
-## Precios de materiales
-
-Los 13 materiales precargados (familias Vidrio, Papel, Plástico y Metal) usan **precios
-referenciales de Mayo 2025 en COP/kg**. Son editables desde *Panel → Materiales y precios*;
-varían por región, calidad y volumen.
+¿El tag no subió? Ejecuta el workflow **Release** manualmente desde la pestaña *Actions*
+indicando el tag. El historial de cambios está en [CHANGELOG.md](CHANGELOG.md).
 
 ## Licencia
 
