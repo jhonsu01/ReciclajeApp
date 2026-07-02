@@ -19,7 +19,7 @@
             android:textColor="@color/verde"
             android:textSize="26sp"
             android:textStyle="bold"
-            android:layout_marginBottom="20dp" />
+            android:layout_marginBottom="16dp" />
 
         <TextView
             android:id="@+id/txtEstadoConexion"
@@ -28,9 +28,64 @@
             android:gravity="center"
             android:textColor="@color/gris"
             android:textSize="13sp"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="14dp" />
 
-        <!-- ============ VISTA 1: CONFIGURACIÓN ============ -->
+        <!-- ============ VISTA 0: SELECCIÓN DE ROL ============ -->
+        <LinearLayout
+            android:id="@+id/vistaRol"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/titulo_rol"
+                android:textColor="@color/texto"
+                android:textSize="18sp"
+                android:layout_marginBottom="16dp" />
+
+            <Button
+                android:id="@+id/btnRolCliente"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:paddingVertical="16dp"
+                android:text="@string/rol_cliente" />
+
+            <Button
+                android:id="@+id/btnRolPesaje"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:paddingVertical="16dp"
+                android:backgroundTint="@color/amarillo"
+                android:textColor="@color/fondo"
+                android:text="@string/rol_pesaje" />
+
+            <Button
+                android:id="@+id/btnRolAdmin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:paddingVertical="16dp"
+                android:backgroundTint="@color/verde_oscuro"
+                android:textColor="@color/texto"
+                android:text="@string/rol_admin" />
+
+            <Button
+                android:id="@+id/btnRolKiosko"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="16dp"
+                android:backgroundTint="@color/panel"
+                android:textColor="@color/texto"
+                android:text="@string/rol_kiosko" />
+        </LinearLayout>
+
+        <!-- ============ VISTA 1: CONEXIÓN ============ -->
         <LinearLayout
             android:id="@+id/vistaConfig"
             android:layout_width="match_parent"
@@ -44,7 +99,24 @@
                 android:text="@string/titulo_config"
                 android:textColor="@color/texto"
                 android:textSize="18sp"
-                android:layout_marginBottom="14dp" />
+                android:layout_marginBottom="10dp" />
+
+            <TextView
+                android:id="@+id/txtBusqueda"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/amarillo"
+                android:textSize="14sp"
+                android:layout_marginBottom="10dp" />
+
+            <Button
+                android:id="@+id/btnBuscar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:backgroundTint="@color/panel"
+                android:textColor="@color/texto"
+                android:text="@string/btn_buscar" />
 
             <EditText
                 android:id="@+id/inputServidor"
@@ -80,9 +152,18 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
                 android:text="@string/btn_conectar" />
+
+            <Button
+                android:id="@+id/btnVolverRol"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="@color/panel"
+                android:textColor="@color/gris"
+                android:text="@string/btn_cambiar_rol" />
         </LinearLayout>
 
-        <!-- ============ VISTA 2: REGISTRO DE TURNO ============ -->
+        <!-- ============ VISTA 2: REGISTRO (CLIENTE) ============ -->
         <LinearLayout
             android:id="@+id/vistaRegistro"
             android:layout_width="match_parent"
@@ -140,10 +221,10 @@
                 android:layout_marginTop="8dp"
                 android:backgroundTint="@color/panel"
                 android:textColor="@color/gris"
-                android:text="@string/btn_cambiar_servidor" />
+                android:text="@string/btn_cambiar_rol" />
         </LinearLayout>
 
-        <!-- ============ VISTA 3: TURNO ACTIVO ============ -->
+        <!-- ============ VISTA 3: TURNO ACTIVO (CLIENTE) ============ -->
         <LinearLayout
             android:id="@+id/vistaTurno"
             android:layout_width="match_parent"
@@ -220,6 +301,147 @@
                 android:layout_height="wrap_content"
                 android:text="@string/btn_nuevo_turno"
                 android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- ============ VISTA 4: LISTA DE TURNOS (PESAJE) ============ -->
+        <LinearLayout
+            android:id="@+id/vistaPesaje"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/titulo_pesaje"
+                android:textColor="@color/texto"
+                android:textSize="18sp"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout
+                android:id="@+id/listaTurnosPesaje"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <Button
+                android:id="@+id/btnCambiarRolPesaje"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:backgroundTint="@color/panel"
+                android:textColor="@color/gris"
+                android:text="@string/btn_cambiar_rol" />
+        </LinearLayout>
+
+        <!-- ============ VISTA 5: DETALLE DE PESAJE ============ -->
+        <LinearLayout
+            android:id="@+id/vistaPesajeDetalle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/txtPesajeTitulo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/texto"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="12dp" />
+
+            <Spinner
+                android:id="@+id/spinnerMaterialPesaje"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/inputKg"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Peso en kg (ej: 12.5)"
+                android:inputType="numberDecimal"
+                android:textColor="@color/texto"
+                android:textColorHint="@color/gris" />
+
+            <TextView
+                android:id="@+id/txtValorEstimado"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="@color/verde"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:layout_marginVertical="10dp" />
+
+            <Button
+                android:id="@+id/btnAgregarPesaje"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:backgroundTint="@color/amarillo"
+                android:textColor="@color/fondo"
+                android:text="@string/btn_agregar_pesaje" />
+
+            <TextView
+                android:id="@+id/txtPesajesLista"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/panel"
+                android:padding="12dp"
+                android:layout_marginTop="12dp"
+                android:textColor="@color/texto"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btnFinalizarPesaje"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/btn_finalizar" />
+
+            <Button
+                android:id="@+id/btnVolverLista"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="@color/panel"
+                android:textColor="@color/gris"
+                android:text="@string/btn_volver" />
+        </LinearLayout>
+
+        <!-- ============ VISTA 6: ADMINISTRADOR (PAGOS) ============ -->
+        <LinearLayout
+            android:id="@+id/vistaAdmin"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/titulo_admin"
+                android:textColor="@color/texto"
+                android:textSize="18sp"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout
+                android:id="@+id/listaRecibos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <Button
+                android:id="@+id/btnCambiarRolAdmin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:backgroundTint="@color/panel"
+                android:textColor="@color/gris"
+                android:text="@string/btn_cambiar_rol" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

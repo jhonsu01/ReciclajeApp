@@ -77,6 +77,97 @@ class ApiClient(private val host: String, private val puerto: Int, private val p
         }
     }
 
+    fun turnos(): JSONArray {
+        val conn = abrir("/api/turnos", "GET")
+        try {
+            val body = leer(conn)
+            if (conn.responseCode != 200) throw ApiException(conn.responseCode, extraerError(body))
+            return JSONArray(body)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    fun setEstado(id: Long, estado: String, modulo: Int?): JSONObject {
+        val conn = abrir("/api/turnos/$id/estado", "PUT")
+        try {
+            conn.doOutput = true
+            val body = JSONObject().put("estado", estado)
+            if (modulo != null) body.put("modulo_asignado", modulo)
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            val resp = leer(conn)
+            if (conn.responseCode != 200) throw ApiException(conn.responseCode, extraerError(resp))
+            return JSONObject(resp)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    fun registrarPesaje(turnoId: Long, materialId: Long, pesoKg: Double): JSONArray {
+        val conn = abrir("/api/pesaje", "POST")
+        try {
+            conn.doOutput = true
+            val body = JSONObject()
+                .put("turno_id", turnoId)
+                .put("material_id", materialId)
+                .put("peso_kg", pesoKg)
+                .put("usuario_pesador", "app-pesaje")
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            val resp = leer(conn)
+            if (conn.responseCode !in 200..299) throw ApiException(conn.responseCode, extraerError(resp))
+            return JSONArray(resp)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    fun pesajes(turnoId: Long): JSONArray {
+        val conn = abrir("/api/pesajes/$turnoId", "GET")
+        try {
+            val body = leer(conn)
+            if (conn.responseCode != 200) throw ApiException(conn.responseCode, extraerError(body))
+            return JSONArray(body)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    fun finalizarTurno(turnoId: Long): JSONObject {
+        val conn = abrir("/api/turnos/$turnoId/finalizar", "POST")
+        try {
+            val body = leer(conn)
+            if (conn.responseCode != 200) throw ApiException(conn.responseCode, extraerError(body))
+            return JSONObject(body)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    fun recibos(soloPendientes: Boolean): JSONArray {
+        val ruta = if (soloPendientes) "/api/recibos?pendientes=1" else "/api/recibos"
+        val conn = abrir(ruta, "GET")
+        try {
+            val body = leer(conn)
+            if (conn.responseCode != 200) throw ApiException(conn.responseCode, extraerError(body))
+            return JSONArray(body)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    fun pagarRecibo(turnoId: Long): JSONObject {
+        val conn = abrir("/api/recibos/$turnoId/pagar", "POST")
+        try {
+            conn.doOutput = true
+            conn.outputStream.use { it.write(JSONObject().put("autorizado_por", "app-admin").toString().toByteArray()) }
+            val body = leer(conn)
+            if (conn.responseCode != 200) throw ApiException(conn.responseCode, extraerError(body))
+            return JSONObject(body)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     fun recibo(turnoId: Long): JSONObject? {
         val conn = abrir("/api/recibos/$turnoId", "GET")
         try {

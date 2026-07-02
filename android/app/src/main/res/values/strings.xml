@@ -1,17 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Reciclaje Turnero</string>
+    <string name="titulo_rol">¿Cómo vas a usar este dispositivo?</string>
+    <string name="rol_cliente">👤 Cliente\nVendo material reciclable</string>
+    <string name="rol_pesaje">⚖️ Pesaje\nRegistro peso y valor</string>
+    <string name="rol_admin">💵 Administrador\nAutorizo desembolsos</string>
+    <string name="rol_kiosko">📺 Modo Kiosko\nPantalla del turnero (TV)</string>
     <string name="titulo_config">Conectar con el centro de reciclaje</string>
     <string name="hint_servidor">IP del servidor (ej: 192.168.0.10)</string>
     <string name="hint_puerto">Puerto (ej: 3000)</string>
-    <string name="hint_pin">PIN de emparejamiento</string>
+    <string name="hint_pin">PIN del rol</string>
     <string name="btn_conectar">Conectar</string>
+    <string name="btn_buscar">🔄 Buscar servidor de nuevo</string>
     <string name="titulo_registro">Solicitar turno</string>
     <string name="hint_documento">Número de documento</string>
     <string name="btn_solicitar">Solicitar turno</string>
     <string name="titulo_turno">Tu turno</string>
     <string name="btn_nuevo_turno">Solicitar nuevo turno</string>
-    <string name="btn_cambiar_servidor">Cambiar servidor</string>
+    <string name="btn_cambiar_rol">Cambiar rol / servidor</string>
     <string name="material_opcional">Material a entregar (opcional)</string>
     <string name="sin_material">— Sin declarar —</string>
+    <string name="titulo_pesaje">Estación de pesaje</string>
+    <string name="titulo_admin">Recibos por pagar</string>
+    <string name="btn_agregar_pesaje">Agregar pesaje</string>
+    <string name="btn_finalizar">Finalizar y generar recibo</string>
+    <string name="btn_volver">← Volver a la lista</string>
 </resources>
