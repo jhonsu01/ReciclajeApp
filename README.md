@@ -5,8 +5,8 @@ Sistema de gestión de reciclaje con turnero inteligente, **offline-first** y de
 | Componente | Tecnología | Entregable |
 | --- | --- | --- |
 | 🖥️ Escritorio (servidor + panel admin) | Electron + Express + WebSocket + SQLite | Instalador **MSI** |
-| 📱 App móvil multirol (cliente / pesaje / admin / kiosko) | Android (Kotlin) | **APK** |
-| 📺 Pantallas informativas | Web en modo oscuro (`/display.html`) con marquesina configurable | Servida por el escritorio |
+| 📱 App móvil multirol (cliente / pesaje / admin / kiosko) | Android (Kotlin) | **`ReciclajeTurnero-*.apk`** |
+| 📺 App dedicada para TV (solo turnero, auto-arranque) | Android (Kotlin) | **`ReciclajeKiosko-*.apk`** |
 
 Los instaladores se publican automáticamente en la sección **[Releases](../../releases)** de este repositorio.
 
@@ -35,6 +35,17 @@ Al abrir la app, cada dispositivo elige cómo se va a usar:
 | ⚖️ **Pesaje** | PIN de sesión → token | Llama turnos al módulo, registra kilos con valor calculado en vivo y finaliza generando el recibo |
 | 💵 **Administrador** | PIN de sesión → token | Ve los recibos por pagar y **autoriza el desembolso** del efectivo |
 | 📺 **Modo Kiosko** | PIN de sesión → token (una sola vez) | Convierte un TV Android en la pantalla del turnero, a pantalla completa y con reconexión automática |
+
+### App dedicada para TV (`Reciclaje TV`)
+
+Para los televisores de la bodega, instala el APK **`ReciclajeKiosko-*.apk`** (app aparte,
+con su propio ícono). Se vincula **una sola vez** con el PIN de sesión de kiosko y a partir
+de ahí:
+
+- **Arranca automáticamente** cuando se enciende o reinicia el televisor.
+- **No vuelve a pedir el PIN** al apagar/encender: queda vinculada de forma permanente.
+- Si el administrador **revoca** el TV desde el panel, se genera un **PIN nuevo solo para el
+  rol kiosko** y el televisor vuelve a pedir la vinculación con ese PIN.
 
 ## Seguridad
 

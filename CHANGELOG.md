@@ -4,6 +4,29 @@ Todas las novedades relevantes de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.5.0] - 2026-07-02
+
+### Añadido
+
+- **APK independiente para TV (`Reciclaje TV`)**: nuevo instalador solo-kiosko
+  (`ReciclajeKiosko-vX.Y.Z.apk`, paquete `com.reciclaje.turnero.kiosko`) pensado para
+  televisores Android. Se instala aparte de la app multirol, con su propio ícono y nombre.
+- **Vinculación única del televisor**: el TV se vincula una sola vez (detección automática
+  del servidor + PIN de sesión de kiosko). Queda emparejado de forma permanente; al apagar,
+  reiniciar o encender ya **no vuelve a pedir el PIN**.
+- **Auto-arranque al encender el TV**: el turnero se abre automáticamente tras reiniciar el
+  televisor (receptor de `BOOT_COMPLETED`), sin intervención.
+- **Revocación con nuevo PIN por rol**: al revocar un dispositivo desde el panel se regenera
+  el PIN de sesión **solo de ese rol** y se muestra al administrador. El televisor revocado
+  lo detecta (chequeo periódico) y vuelve a pedir vinculación con el nuevo PIN.
+- **Regeneración de PIN por rol individual** en el panel (botón por cada rol), además de la
+  regeneración global existente.
+
+### Notas
+
+- La app completa (`Reciclaje Turnero`) sigue incluyendo el modo kiosko para pruebas; para
+  los televisores de la bodega se recomienda el APK dedicado `Reciclaje TV`.
+
 ## [0.4.0] - 2026-07-02
 
 ### Corregido
