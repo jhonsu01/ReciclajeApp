@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sobrescribe el nombre para el APK de kiosko (aparece así en el launcher del TV). -->
+<resources>
+    <string name="app_name">Reciclaje TV</string>
+</resources>

@@ -8,11 +8,31 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.reciclaje.turnero"
         minSdk 24
         targetSdk 35
-        versionCode 4
-        versionName "0.4.0"
+        versionCode 5
+        versionName "0.5.0"
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    // Dos APKs desde el mismo código:
+    //  - completa: app multirol (com.reciclaje.turnero)
+    //  - kiosko:   solo turnero para TV, arranca al encender (com.reciclaje.turnero.kiosko)
+    flavorDimensions "modo"
+    productFlavors {
+        completa {
+            dimension "modo"
+            applicationId "com.reciclaje.turnero"
+            buildConfigField "boolean", "KIOSKO_APP", "false"
+        }
+        kiosko {
+            dimension "modo"
+            applicationId "com.reciclaje.turnero.kiosko"
+            buildConfigField "boolean", "KIOSKO_APP", "true"
+        }
     }
 
     signingConfigs {

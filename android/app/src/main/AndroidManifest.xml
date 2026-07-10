@@ -19,15 +19,17 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.Reciclaje">
+
+        <!-- El atributo exported y el intent-filter de lanzador los define cada flavor:
+             completa -> MainActivity | kiosko -> KioskLauncherActivity -->
         <activity
-            android:name=".MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:name=".MainActivity" />
+
+        <activity
+            android:name=".KioskLauncherActivity"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
         <activity
             android:name=".KioskActivity"
             android:exported="false"

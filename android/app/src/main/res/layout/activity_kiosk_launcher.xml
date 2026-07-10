@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:padding="32dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="♻ Reciclaje TV"
+            android:textColor="@color/verde"
+            android:textSize="30sp"
+            android:textStyle="bold"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Vincular este televisor al centro de reciclaje"
+            android:textColor="@color/texto"
+            android:textSize="16sp"
+            android:layout_marginBottom="18dp" />
+
+        <TextView
+            android:id="@+id/txtBusqueda"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="@color/amarillo"
+            android:textSize="14sp"
+            android:layout_marginBottom="14dp" />
+
+        <EditText
+            android:id="@+id/inputServidor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="IP del servidor (ej: 192.168.0.10)"
+            android:inputType="text"
+            android:textColor="@color/texto"
+            android:textColorHint="@color/gris" />
+
+        <EditText
+            android:id="@+id/inputPuerto"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Puerto (ej: 3000)"
+            android:inputType="number"
+            android:text="3000"
+            android:textColor="@color/texto"
+            android:textColorHint="@color/gris" />
+
+        <EditText
+            android:id="@+id/inputPin"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="PIN de sesión — Kiosko (ver panel del PC)"
+            android:inputType="numberPassword"
+            android:textColor="@color/texto"
+            android:textColorHint="@color/gris" />
+
+        <Button
+            android:id="@+id/btnVincular"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="📺 Vincular televisor" />
+
+        <Button
+            android:id="@+id/btnBuscar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="@color/panel"
+            android:textColor="@color/texto"
+            android:text="🔄 Buscar servidor de nuevo" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Se vincula una sola vez. Al encender el TV, el turnero abrirá automáticamente."
+            android:textColor="@color/gris"
+            android:textSize="13sp"
+            android:gravity="center"
+            android:layout_marginTop="20dp" />
+    </LinearLayout>
+</ScrollView>
