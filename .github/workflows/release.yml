@@ -58,21 +58,24 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Compilar APK release
+      - name: Compilar APKs release (app completa + kiosko TV)
         working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
-      - name: Renombrar APK con versión
+      - name: Renombrar APKs con versión
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          cp android/app/build/outputs/apk/release/app-release.apk "ReciclajeTurnero-${TAG}.apk"
+          cp android/app/build/outputs/apk/completa/release/app-completa-release.apk "ReciclajeTurnero-${TAG}.apk"
+          cp android/app/build/outputs/apk/kiosko/release/app-kiosko-release.apk "ReciclajeKiosko-${TAG}.apk"
 
       - uses: actions/upload-artifact@v4
         with:
           name: apk
-          path: ReciclajeTurnero-*.apk
+          path: |
+            ReciclajeTurnero-*.apk
+            ReciclajeKiosko-*.apk
           if-no-files-found: error
 
   release:

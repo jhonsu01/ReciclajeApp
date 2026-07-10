@@ -105,9 +105,34 @@ const { crearServidor } = require(path.join(__dirname, '..', 'desktop', 'src', '
   r = await fetch(base + '/api/dispositivos');
   const dispositivos = await j(r);
   if (!dispositivos.length || !dispositivos[0].activo) throw new Error('dispositivo no registrado');
-  r = await fetch(`${base}/api/dispositivos/${dispositivos[0].id}/revocar`, { method: 'POST' });
-  if (r.status !== 200) throw new Error('revocar falló');
-  console.log('emparejamiento + revocación OK');
+  const pinKioskoAntes = cfg.pines_sesion.kiosko;
+  // Emparejar un kiosko para revocarlo y comprobar que regenera SU PIN
+  r = await fetch(base + '/api/emparejar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rol: 'kiosko', pin: pinKioskoAntes, nombre: 'smoke-tv' }),
+  });
+  const tv = await j(r);
+  if (r.status !== 201 || !tv.token) throw new Error('emparejar kiosko falló');
+  const disp = await (await fetch(base + '/api/dispositivos')).json();
+  const idTv = disp.find(d => d.rol === 'kiosko' && d.activo).id;
+  r = await fetch(`${base}/api/dispositivos/${idTv}/revocar`, { method: 'POST' });
+  const rev = await j(r);
+  if (r.status !== 200 || !rev.nuevo_pin || rev.nuevo_pin === pinKioskoAntes) {
+    throw new Error('revocar kiosko debía regenerar el PIN de ese rol');
+  }
+  console.log('revocación regenera PIN del rol OK (kiosko:', pinKioskoAntes, '->', rev.nuevo_pin + ')');
+
+  // El dispositivo revocado queda inactivo (en un TV real, no-localhost, su token
+  // deja de reconocerse y el ping devuelve rol 'cliente' -> la app vuelve a vincular)
+  const dispRev = await (await fetch(base + '/api/dispositivos')).json();
+  if (dispRev.find(d => d.id === idTv).activo) throw new Error('el dispositivo revocado seguía activo');
+  console.log('dispositivo revocado queda inactivo OK');
+
+  // Regeneración de PIN por un solo rol
+  r = await fetch(base + '/api/config/regenerar-pin/pesaje', { method: 'POST' });
+  const regen = await j(r);
+  if (r.status !== 200 || !regen.pin || regen.pin === cfg.pines_sesion.pesaje) throw new Error('regen PIN por rol falló');
+  console.log('regen PIN por rol OK');
 
   // Materiales personalizados: crear y eliminar
   r = await fetch(base + '/api/materiales', {

@@ -156,9 +156,10 @@
       <b>🔐 PINs de emparejamiento de esta sesión</b>
       <div class="hint">Cambian en cada arranque del servidor. Se ingresan UNA sola vez por dispositivo:
       al emparejar, el dispositivo recibe un acceso permanente que puedes revocar abajo.
-      El rol Cliente no necesita PIN.</div>
-      <table style="margin-top:.8rem;max-width:520px;">
-        <thead><tr><th>Rol</th><th>PIN de sesión</th></tr></thead>
+      El rol Cliente no necesita PIN. El TV en modo kiosko queda vinculado para siempre
+      (arranca solo al encender) hasta que lo revoques.</div>
+      <table style="margin-top:.8rem;max-width:620px;">
+        <thead><tr><th>Rol</th><th>PIN de sesión</th><th></th></tr></thead>
         <tbody id="cuerpo-pines"></tbody>
       </table>
       <div class="fila-acciones">
@@ -543,6 +544,7 @@ function pintarPines() {
   $('cuerpo-pines').innerHTML = Object.keys(nombres).map(rol => `<tr>
     <td>${nombres[rol]}</td>
     <td><b style="font-size:1.2rem;letter-spacing:.15em;">${p[rol] || '—'}</b></td>
+    <td><button class="accion" onclick="regenerarPinRol('${rol}')">🔄 Nuevo PIN</button></td>
   </tr>`).join('');
   $('conexion').innerHTML =
     `Servidor: <b>http://${config.ip}:${config.puerto}</b> &nbsp;|&nbsp; ` +
@@ -589,6 +591,16 @@ async function regenerarPines() {
   pintarPines();
 }
 
+const nombreRol = { pesaje: 'Pesaje', admin: 'Administrador', kiosko: 'Kiosko (TV)' };
+
+async function regenerarPinRol(rol) {
+  if (!confirm(`¿Generar un PIN nuevo para el rol ${nombreRol[rol] || rol}? El anterior dejará de servir para nuevas vinculaciones.`)) return;
+  const r = await api(`/api/config/regenerar-pin/${rol}`, { method: 'POST' });
+  config.pines_sesion = r.pines_sesion;
+  pintarPines();
+  alert(`Nuevo PIN de ${nombreRol[rol] || rol}: ${r.pin}`);
+}
+
 async function cargarDispositivos() {
   const dispositivos = await api('/api/dispositivos');
   const roles = { pesaje: '⚖️ Pesaje', admin: '💵 Admin', kiosko: '📺 Kiosko' };
@@ -603,9 +615,14 @@ async function cargarDispositivos() {
 }
 
 async function revocarDispositivo(id) {
-  if (!confirm('¿Revocar el acceso de este dispositivo? Dejará de funcionar de inmediato.')) return;
-  await api(`/api/dispositivos/${id}/revocar`, { method: 'POST' });
+  if (!confirm('¿Revocar el acceso de este dispositivo? Dejará de funcionar de inmediato y se generará un PIN nuevo para ese rol.')) return;
+  const r = await api(`/api/dispositivos/${id}/revocar`, { method: 'POST' });
+  if (r.pines_sesion) { config.pines_sesion = r.pines_sesion; pintarPines(); }
   await cargarDispositivos();
+  if (r.nuevo_pin) {
+    alert(`Acceso revocado. Nuevo PIN de ${nombreRol[r.rol] || r.rol}: ${r.nuevo_pin}\n` +
+      `Ese dispositivo volverá a pedir vinculación con este PIN.`);
+  }
 }
 
 function cerrarModal(id) { $(id).classList.remove('abierto'); cargarTurnos(); }

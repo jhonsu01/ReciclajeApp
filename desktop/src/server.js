@@ -264,13 +264,33 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
   app.get('/api/dispositivos', soloAdmin, (_req, res) => res.json(db.getDispositivos()));
 
   app.post('/api/dispositivos/:id/revocar', soloAdmin, (req, res) => {
-    res.json(db.revocarDispositivo(Number(req.params.id)));
+    const disp = db.getDispositivos().find(d => d.id === Number(req.params.id));
+    db.revocarDispositivo(Number(req.params.id));
+    // Al revocar, se regenera el PIN de sesión de ESE rol: el dispositivo
+    // revocado (p.ej. un TV en kiosko) detecta la revocación y, para volver a
+    // vincularse, necesitará el PIN nuevo que solo ve el administrador.
+    let nuevoPin = null;
+    if (disp && pinsSesion[disp.rol]) {
+      pinsSesion[disp.rol] = generarPin();
+      nuevoPin = pinsSesion[disp.rol];
+    }
     broadcast('dispositivos_updated');
+    res.json({ ok: true, rol: disp ? disp.rol : null, nuevo_pin: nuevoPin, pines_sesion: pinsSesion });
   });
 
   app.post('/api/config/regenerar-pines', soloAdmin, (_req, res) => {
     regenerarPins();
     res.json({ pines_sesion: pinsSesion });
+  });
+
+  // Regenera el PIN de sesión de un solo rol (pesaje, admin o kiosko)
+  app.post('/api/config/regenerar-pin/:rol', soloAdmin, (req, res) => {
+    const rol = req.params.rol;
+    if (!['pesaje', 'admin', 'kiosko'].includes(rol)) {
+      return res.status(400).json({ error: 'rol debe ser pesaje, admin o kiosko' });
+    }
+    pinsSesion[rol] = generarPin();
+    res.json({ rol, pin: pinsSesion[rol], pines_sesion: pinsSesion });
   });
 
   app.get('/api/config', soloAdmin, (_req, res) => {
