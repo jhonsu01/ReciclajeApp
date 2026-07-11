@@ -39,6 +39,46 @@ class ApiClient(private val host: String, private val puerto: Int, private val t
         }
     }
 
+    // ---- Inventario ----
+    fun inventario(): JSONArray {
+        val conn = abrir("/api/inventario", "GET")
+        try {
+            val body = leer(conn)
+            if (conn.responseCode != 200) throw ApiException(conn.responseCode, extraerError(body))
+            return JSONArray(body)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun postInventario(ruta: String, body: JSONObject): JSONArray {
+        val conn = abrir(ruta, "POST")
+        try {
+            conn.doOutput = true
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            val resp = leer(conn)
+            if (conn.responseCode !in 200..299) throw ApiException(conn.responseCode, extraerError(resp))
+            return JSONArray(resp)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    fun inventarioEntrada(materialId: Long, embalaje: String, pesoKg: Double, unidades: Int): JSONArray =
+        postInventario("/api/inventario/entrada", JSONObject()
+            .put("material_id", materialId).put("embalaje", embalaje)
+            .put("peso_kg", pesoKg).put("unidades", unidades))
+
+    fun inventarioAjuste(materialId: Long, embalaje: String, pesoKg: Double, unidades: Int): JSONArray =
+        postInventario("/api/inventario/ajuste", JSONObject()
+            .put("material_id", materialId).put("embalaje", embalaje)
+            .put("peso_kg", pesoKg).put("unidades", unidades))
+
+    fun inventarioEmbalaje(materialId: Long, embalajeDestino: String, pesoKg: Double, unidades: Int): JSONArray =
+        postInventario("/api/inventario/embalaje", JSONObject()
+            .put("material_id", materialId).put("embalaje_destino", embalajeDestino)
+            .put("peso_kg", pesoKg).put("unidades", unidades))
+
     /** Historial de pagos del cliente, filtrado por su documento. */
     fun historial(tipoDoc: String, numeroDoc: String): JSONArray {
         val conn = abrir("/api/historial?tipo_documento=$tipoDoc&numero_documento=$numeroDoc", "GET")

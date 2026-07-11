@@ -61,6 +61,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnRolCliente).setOnClickListener { elegirRol("cliente") }
         findViewById<Button>(R.id.btnRolPesaje).setOnClickListener { elegirRol("pesaje") }
         findViewById<Button>(R.id.btnRolAdmin).setOnClickListener { elegirRol("admin") }
+        findViewById<Button>(R.id.btnRolInventario).setOnClickListener { elegirRol("inventario") }
         findViewById<Button>(R.id.btnRolKiosko).setOnClickListener { elegirRol("kiosko") }
 
         // Conexión
@@ -88,6 +89,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnCambiarServidor).setOnClickListener(reset)
         findViewById<Button>(R.id.btnCambiarRolPesaje).setOnClickListener(reset)
         findViewById<Button>(R.id.btnCambiarRolAdmin).setOnClickListener(reset)
+        findViewById<Button>(R.id.btnCambiarRolInventario).setOnClickListener(reset)
+        findViewById<EditText>(R.id.inputBuscarInv).addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) { pintarInventario() }
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        })
 
         // En el APK solo-cliente no existe la pantalla de roles: se ocultan los botones
         // que llevarían a ella y se renombra "cambiar servidor".
@@ -130,7 +137,7 @@ class MainActivity : AppCompatActivity() {
         detenerPeriodica()
         val vistas = listOf(
             R.id.vistaRol, R.id.vistaConfig, R.id.vistaRegistro, R.id.vistaTurno,
-            R.id.vistaPesaje, R.id.vistaPesajeDetalle, R.id.vistaAdmin,
+            R.id.vistaPesaje, R.id.vistaPesajeDetalle, R.id.vistaAdmin, R.id.vistaInventario,
         )
         for (v in vistas) findViewById<View>(v).visibility = if (v == id) View.VISIBLE else View.GONE
     }
@@ -178,32 +185,25 @@ class MainActivity : AppCompatActivity() {
         estadoConexion("Servidor: $host:${prefs.getInt("puerto", 3000)} · rol: $rol")
 
         // Roles elevados: verificar que el acceso no haya sido revocado desde el panel
-        if (rol in listOf("pesaje", "admin", "kiosko")) {
+        if (rol in listOf("pesaje", "admin", "inventario", "kiosko")) {
+            val entrar = {
+                when (rol) {
+                    "kiosko" -> startActivity(Intent(this, KioskActivity::class.java))
+                    "pesaje" -> entrarPesaje()
+                    "admin" -> entrarAdmin()
+                    "inventario" -> entrarInventario()
+                }
+            }
             io.execute {
                 try {
                     val info = cliente.ping()
                     val vigente = info.optString("rol") == rol || info.optString("rol") == "admin"
                     ui.post {
-                        if (!vigente) {
-                            toast("El acceso de este dispositivo fue revocado")
-                            cambiarRol()
-                        } else {
-                            when (rol) {
-                                "kiosko" -> startActivity(Intent(this, KioskActivity::class.java))
-                                "pesaje" -> entrarPesaje()
-                                "admin" -> entrarAdmin()
-                            }
-                        }
+                        if (!vigente) { toast("El acceso de este dispositivo fue revocado"); cambiarRol() }
+                        else entrar()
                     }
                 } catch (e: Exception) {
-                    // Sin red por ahora: entrar igual, las llamadas reintentarán
-                    ui.post {
-                        when (rol) {
-                            "kiosko" -> startActivity(Intent(this, KioskActivity::class.java))
-                            "pesaje" -> entrarPesaje()
-                            "admin" -> entrarAdmin()
-                        }
-                    }
+                    ui.post { entrar() } // sin red: entrar igual, las llamadas reintentarán
                 }
             }
             return
@@ -232,6 +232,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<EditText>(R.id.inputPin).hint = when (rol) {
             "pesaje" -> "PIN de sesión — Pesaje (ver panel del PC)"
             "admin" -> "PIN de sesión — Administrador (ver panel del PC)"
+            "inventario" -> "PIN de sesión — Inventario (ver panel del PC)"
             "kiosko" -> "PIN de sesión — Kiosko (ver panel del PC)"
             else -> ""
         }
@@ -299,6 +300,7 @@ class MainActivity : AppCompatActivity() {
                         "kiosko" -> startActivity(Intent(this, KioskActivity::class.java))
                         "pesaje" -> entrarPesaje()
                         "admin" -> entrarAdmin()
+                        "inventario" -> entrarInventario()
                     }
                 }
             } catch (e: ApiException) {
@@ -852,6 +854,149 @@ class MainActivity : AppCompatActivity() {
                     .show()
             }
         }
+    }
+
+    // ---------- ROL INVENTARIO ----------
+    private var inventarioCache: JSONArray = JSONArray()
+    private val embalajes = listOf("Bulto", "Bloque", "Paca", "Compactado")
+
+    private fun entrarInventario() {
+        mostrarVista(R.id.vistaInventario)
+        iniciarPeriodica(10000) { refrescarInventario() }
+    }
+
+    private fun refrescarInventario() {
+        val cliente = api ?: return
+        io.execute {
+            try {
+                val inv = cliente.inventario()
+                ui.post {
+                    inventarioCache = inv
+                    estadoConexion("Servidor: ${prefs.getString("host", "")} · rol: inventario")
+                    pintarInventario()
+                }
+            } catch (e: Exception) {
+                ui.post { estadoConexion("Sin conexión — reintentando…") }
+            }
+        }
+    }
+
+    private fun pintarInventario() {
+        val q = findViewById<EditText>(R.id.inputBuscarInv).text.toString().trim().lowercase()
+        val cont = findViewById<LinearLayout>(R.id.listaInventario)
+        cont.removeAllViews()
+        // Agrupar por material para mostrar sus embalajes juntos
+        var mostrados = 0
+        for (i in 0 until inventarioCache.length()) {
+            val x = inventarioCache.getJSONObject(i)
+            val etiqueta = "${x.getString("familia")} / ${x.getString("subcategoria")}"
+            if (q.length >= 2 && !etiqueta.lowercase().contains(q)) continue
+            mostrados++
+
+            val tarjeta = LinearLayout(this)
+            tarjeta.orientation = LinearLayout.VERTICAL
+            tarjeta.setBackgroundColor(getColor(R.color.panel))
+            tarjeta.setPadding(28, 20, 28, 20)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp.bottomMargin = 12
+            tarjeta.layoutParams = lp
+
+            val titulo = TextView(this)
+            titulo.text = "$etiqueta · ${x.getString("embalaje")}"
+            titulo.setTextColor(getColor(R.color.texto))
+            titulo.textSize = 15f
+            tarjeta.addView(titulo)
+
+            val detalle = TextView(this)
+            val unidades = x.optInt("unidades")
+            detalle.text = "Stock: ${formato(x.getDouble("peso_kg").toLong())} kg" +
+                (if (unidades > 0) " · $unidades unidades" else "")
+            detalle.setTextColor(getColor(R.color.verde))
+            detalle.textSize = 13f
+            tarjeta.addView(detalle)
+
+            val fila = LinearLayout(this)
+            fila.orientation = LinearLayout.HORIZONTAL
+            val bEntrada = Button(this)
+            bEntrada.text = "➕ Entrada"; bEntrada.textSize = 12f; bEntrada.isAllCaps = false
+            bEntrada.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            bEntrada.setOnClickListener { dialogoEntrada(x) }
+            fila.addView(bEntrada)
+            if (x.getString("embalaje") == "Suelto") {
+                val bEmbalar = Button(this)
+                bEmbalar.text = "📦 Embalar"; bEmbalar.textSize = 12f; bEmbalar.isAllCaps = false
+                bEmbalar.setBackgroundColor(getColor(R.color.amarillo)); bEmbalar.setTextColor(getColor(R.color.fondo))
+                bEmbalar.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                bEmbalar.setOnClickListener { dialogoEmbalar(x) }
+                fila.addView(bEmbalar)
+            }
+            tarjeta.addView(fila)
+            cont.addView(tarjeta)
+        }
+        if (mostrados == 0) {
+            val vacio = TextView(this)
+            vacio.text = "Sin material en inventario todavía. Se llena con los pesajes."
+            vacio.setTextColor(getColor(R.color.gris))
+            cont.addView(vacio)
+        }
+    }
+
+    private fun dialogoEntrada(x: JSONObject) {
+        val cliente = api ?: return
+        val input = EditText(this)
+        input.hint = "Kilos que entran"
+        input.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        AlertDialog.Builder(this)
+            .setTitle("➕ Entrada — ${x.getString("familia")} / ${x.getString("subcategoria")} (${x.getString("embalaje")})")
+            .setView(input)
+            .setPositiveButton("Registrar") { _, _ ->
+                val kg = input.text.toString().toDoubleOrNull() ?: 0.0
+                if (kg <= 0) { toast("Ingresa un peso válido"); return@setPositiveButton }
+                io.execute {
+                    try {
+                        cliente.inventarioEntrada(x.getLong("material_id"), x.getString("embalaje"), kg, 0)
+                        ui.post { toast("Entrada registrada ✓"); refrescarInventario() }
+                    } catch (e: Exception) { ui.post { toast("Error: ${e.message}") } }
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun dialogoEmbalar(x: JSONObject) {
+        val cliente = api ?: return
+        val contenedor = LinearLayout(this)
+        contenedor.orientation = LinearLayout.VERTICAL
+        contenedor.setPadding(48, 24, 48, 8)
+        val spinner = Spinner(this)
+        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, embalajes)
+        contenedor.addView(spinner)
+        val inputKg = EditText(this)
+        inputKg.hint = "Kilos a embalar (hay ${formato(x.getDouble("peso_kg").toLong())} suelto)"
+        inputKg.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        contenedor.addView(inputKg)
+        val inputU = EditText(this)
+        inputU.hint = "Nº de unidades resultantes"
+        inputU.inputType = InputType.TYPE_CLASS_NUMBER
+        contenedor.addView(inputU)
+
+        AlertDialog.Builder(this)
+            .setTitle("📦 Embalar — ${x.getString("familia")} / ${x.getString("subcategoria")}")
+            .setView(contenedor)
+            .setPositiveButton("Embalar") { _, _ ->
+                val kg = inputKg.text.toString().toDoubleOrNull() ?: 0.0
+                val u = inputU.text.toString().toIntOrNull() ?: 0
+                if (kg <= 0 || u <= 0) { toast("Peso y unidades deben ser mayores que cero"); return@setPositiveButton }
+                io.execute {
+                    try {
+                        cliente.inventarioEmbalaje(x.getLong("material_id"), spinner.selectedItem.toString(), kg, u)
+                        ui.post { toast("Material embalado ✓"); refrescarInventario() }
+                    } catch (e: Exception) { ui.post { toast("Error: ${e.message}") } }
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     // ---------- Utilidades ----------
