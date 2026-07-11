@@ -136,3 +136,11 @@ indicando el tag. El historial de cambios está en [CHANGELOG.md](CHANGELOG.md).
 ## Licencia
 
 [MIT](LICENSE)
+
+## Apoyo / Donaciones
+
+Si este proyecto te resulta útil, puedes apoyar su desarrollo:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7V81LV7GX)
+
+Repositorio: <https://github.com/jhonsu01/ReciclajeApp>
