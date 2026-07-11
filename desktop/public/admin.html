@@ -74,6 +74,7 @@
   <button data-tab="turnos" class="activo">Turnos</button>
   <button data-tab="materiales">Materiales y precios</button>
   <button data-tab="config">Configuración</button>
+  <button data-tab="acerca">Acerca de</button>
 </nav>
 <main>
   <div class="tab activo" id="tab-turnos">
@@ -177,6 +178,29 @@
     <div class="card">
       <b>Conexión de la app Android</b>
       <p class="hint" id="instrucciones-app">…</p>
+    </div>
+  </div>
+
+  <div class="tab" id="tab-acerca">
+    <div class="card" style="text-align:center;">
+      <h2 style="color:#14532D;letter-spacing:normal;text-transform:none;font-size:1.5rem;">♻ Reciclaje Turnero</h2>
+      <p class="hint" id="acerca-version" style="font-size:.95rem;">Versión —</p>
+      <p style="margin-top:.6rem;">Sistema de gestión de reciclaje con turnero inteligente (offline-first).</p>
+      <p style="margin-top:.8rem;">Repositorio:
+        <a href="https://github.com/jhonsu01/ReciclajeApp" target="_blank">github.com/jhonsu01/ReciclajeApp</a>
+      </p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <b>Apoya el proyecto</b>
+      <p class="hint">Si esta herramienta te resulta útil, puedes apoyar su desarrollo:</p>
+      <p style="margin-top:.8rem;">
+        <a href="https://ko-fi.com/V7V81LV7GX" target="_blank">
+          <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Apóyame en Ko-fi" style="height:36px;">
+        </a>
+      </p>
+      <p class="hint" style="margin-top:.5rem;">
+        ¿Sin internet? Visita <b>ko-fi.com/V7V81LV7GX</b>
+      </p>
     </div>
   </div>
 </main>
@@ -641,6 +665,11 @@ function conectarWS() {
 
 cargarConfig(); cargarMateriales(); cargarTurnos(); conectarWS();
 setInterval(cargarTurnos, 20000);
+
+// Versión para la pestaña "Acerca de"
+fetch('/api/ping').then(r => r.json())
+  .then(d => { if (d.version) $('acerca-version').textContent = 'Versión ' + d.version; })
+  .catch(() => {});
 </script>
 </body>
 </html>

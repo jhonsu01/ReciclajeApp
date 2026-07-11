@@ -1,6 +1,6 @@
 'use strict';
 const path = require('path');
-const { app, BrowserWindow, Menu, dialog } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
 const { crearServidor } = require('./server');
 
 const PUERTO = Number(process.env.RECICLAJE_PUERTO) || 3000;
@@ -25,6 +25,12 @@ async function iniciar() {
     autoHideMenuBar: true,
   });
   win.loadURL(`http://127.0.0.1:${PUERTO}/admin.html`);
+
+  // Los enlaces externos (Ko-fi, repositorio) se abren en el navegador del sistema
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) { shell.openExternal(url); return { action: 'deny' }; }
+    return { action: 'allow' };
+  });
 }
 
 Menu.setApplicationMenu(null);
