@@ -89,6 +89,13 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnCambiarRolPesaje).setOnClickListener(reset)
         findViewById<Button>(R.id.btnCambiarRolAdmin).setOnClickListener(reset)
 
+        // En el APK solo-cliente no existe la pantalla de roles: se ocultan los botones
+        // que llevarían a ella y se renombra "cambiar servidor".
+        if (BuildConfig.CLIENTE_APP) {
+            findViewById<Button>(R.id.btnVolverRol).visibility = View.GONE
+            findViewById<Button>(R.id.btnCambiarServidor).text = "Cambiar servidor"
+        }
+
         restaurarSesion()
     }
 
@@ -142,6 +149,8 @@ class MainActivity : AppCompatActivity() {
     private fun cambiarRol() {
         prefs.edit().remove("rol").remove("turno_id").apply()
         rolElegido = null
+        // En el APK solo-cliente no hay selección de rol: se reconecta como cliente
+        if (BuildConfig.CLIENTE_APP) { elegirRol("cliente"); return }
         mostrarVista(R.id.vistaRol)
     }
 
@@ -149,7 +158,8 @@ class MainActivity : AppCompatActivity() {
         val rol = prefs.getString("rol", null)
         val host = prefs.getString("host", null)
         if (rol == null || host == null) {
-            mostrarVista(R.id.vistaRol)
+            // El APK solo-cliente entra directo al rol cliente (sin pantalla de roles)
+            if (BuildConfig.CLIENTE_APP) elegirRol("cliente") else mostrarVista(R.id.vistaRol)
             return
         }
         rolElegido = rol
@@ -795,27 +805,43 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun dialogoPagar(r: JSONObject) {
+        val cliente = api ?: return
         val u = r.getJSONObject("usuario")
-        AlertDialog.Builder(this)
-            .setTitle("Autorizar desembolso")
-            .setMessage("Turno %03d · %s %s\n\n¿Autorizar el pago de $%s en efectivo?".format(
-                r.getInt("numero_turno"), u.getString("tipo_documento"),
-                u.getString("numero_documento"), formato(r.getLong("total"))))
-            .setPositiveButton("Autorizar") { _, _ ->
-                io.execute {
-                    try {
-                        api?.pagarRecibo(r.getLong("turno_id"))
-                        ui.post {
-                            toast("Desembolso autorizado ✓")
-                            refrescarRecibos()
-                        }
-                    } catch (e: Exception) {
-                        ui.post { toast("Error: ${e.message}") }
+        val turnoId = r.getLong("turno_id")
+        // Cargar el detalle del recibo (materiales pesados) antes de mostrar el diálogo,
+        // igual que el panel de escritorio.
+        io.execute {
+            val detalle = try { cliente.recibo(turnoId) } catch (e: Exception) { null }
+            ui.post {
+                val sb = StringBuilder("Turno %03d · %s %s\n\n".format(
+                    r.getInt("numero_turno"), u.getString("tipo_documento"), u.getString("numero_documento")))
+                val items = detalle?.optJSONArray("detalle")
+                if (items != null && items.length() > 0) {
+                    sb.append("Material pesado:\n")
+                    for (i in 0 until items.length()) {
+                        val d = items.getJSONObject(i)
+                        sb.append("• ${d.getString("material")}\n   ${d.getDouble("kg")} kg × $${formato(d.getLong("precio_unitario"))} = $${formato(d.getLong("total"))}\n")
                     }
+                    sb.append("\n")
                 }
+                sb.append("¿Autorizar el pago de $${formato(r.getLong("total"))} en efectivo?")
+                AlertDialog.Builder(this)
+                    .setTitle("Autorizar desembolso")
+                    .setMessage(sb.toString())
+                    .setPositiveButton("Autorizar") { _, _ ->
+                        io.execute {
+                            try {
+                                cliente.pagarRecibo(turnoId)
+                                ui.post { toast("Desembolso autorizado ✓"); refrescarRecibos() }
+                            } catch (e: Exception) {
+                                ui.post { toast("Error: ${e.message}") }
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
             }
-            .setNegativeButton("Cancelar", null)
-            .show()
+        }
     }
 
     // ---------- Utilidades ----------

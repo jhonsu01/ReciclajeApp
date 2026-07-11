@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícono del APK cliente: persona con símbolo de reciclaje -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#166534"
+        android:pathData="M54,54m-50,0a50,50 0,1 1,100 0a50,50 0,1 1,-100 0" />
+    <!-- Cabeza -->
+    <path
+        android:fillColor="#F2F2F2"
+        android:pathData="M54,34m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0" />
+    <!-- Hombros -->
+    <path
+        android:fillColor="#F2F2F2"
+        android:pathData="M32,74 a22,22 0 0 1 44,0 v4 h-44 z" />
+    <!-- Flecha de reciclaje sobre el pecho -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M54,60 L61,69 L57,69 L57,76 L51,76 L51,69 L47,69 Z" />
+</vector>
