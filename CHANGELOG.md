@@ -4,6 +4,23 @@ Todas las novedades relevantes de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.6.0] - 2026-07-10
+
+### Añadido
+
+- **APK independiente para el cliente (`Reciclaje Cliente`)**: nuevo instalador
+  (`ReciclajeCliente-vX.Y.Z.apk`, paquete `com.reciclaje.turnero.cliente`) que abre
+  directamente el flujo del reciclador, **sin mostrar los demás roles**. Ícono y nombre
+  propios. La app completa sigue disponible para pesaje y administrador.
+- La app del **administrador** ahora muestra el **detalle de materiales pesados**
+  (material, kg, precio y subtotal) al autorizar el desembolso, igual que el panel de
+  escritorio.
+
+### Cambiado
+
+- En el panel de escritorio, la tabla de turnos ordena el **más reciente arriba** (para no
+  desplazarse hacia abajo cuando hay muchos turnos).
+
 ## [0.5.0] - 2026-07-02
 
 ### Añadido
