@@ -686,7 +686,7 @@ function pintarPines() {
   </tr>`).join('');
   $('conexion').innerHTML =
     `Servidor: <b>http://${config.ip}:${config.puerto}</b> &nbsp;|&nbsp; ` +
-    `PIN sesión — pesaje: <b>${p.pesaje}</b> · admin: <b>${p.admin}</b> · kiosko: <b>${p.kiosko}</b>`;
+    `PIN sesión — pesaje: <b>${p.pesaje}</b> · admin: <b>${p.admin}</b> · inventario: <b>${p.inventario}</b> · kiosko: <b>${p.kiosko}</b>`;
 }
 
 async function cargarConfig() {
@@ -893,6 +893,9 @@ let manifiestoActual = null;
 async function generarSalida() {
   if (!$('sal-fecha').value) return alert('La fecha de salida es obligatoria.');
   if (!itemsSalida.length) return alert('Agrega al menos un material.');
+  const totalKg = itemsSalida.reduce((s, it) => s + it.peso_kg, 0).toLocaleString('es-CO');
+  if (!confirm(`¿Generar la salida y descontar ${totalKg} kg del inventario?\n\n` +
+    `Esta acción NO se puede editar ni deshacer. Verifica los datos y los materiales antes de continuar.`)) return;
   const body = {
     fecha_salida: $('sal-fecha').value,
     despacha: $('sal-despacha').value.trim(), recibe: $('sal-recibe').value.trim(),

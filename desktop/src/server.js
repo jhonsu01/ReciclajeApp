@@ -213,6 +213,7 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
         peso_kg: kg, usuario_pesador: usuario_pesador || 'admin',
       });
       broadcast('turnos_updated');
+      broadcast('inventario_updated'); // el material pesado entró al inventario
       res.status(201).json(pesajes);
     } catch (e) {
       res.status(400).json({ error: e.message });
