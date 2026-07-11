@@ -34,6 +34,7 @@ Al abrir la app, cada dispositivo elige cómo se va a usar:
 | 👤 **Cliente** | Sin PIN (se identifica con su documento) | Solicita turno (QR + PIN), vibra al ser llamado, ve su recibo, recibe la notificación de **pago** y consulta su historial (pendientes y pagados) |
 | ⚖️ **Pesaje** | PIN de sesión → token | Llama turnos al módulo, registra kilos con valor calculado en vivo y finaliza generando el recibo |
 | 💵 **Administrador** | PIN de sesión → token | Ve los recibos por pagar y **autoriza el desembolso** del efectivo |
+| 📦 **Inventario** | PIN de sesión → token | Ve el stock de material embalado, registra entradas y embala material suelto en bultos/bloques/pacas |
 | 📺 **Modo Kiosko** | PIN de sesión → token (una sola vez) | Convierte un TV Android en la pantalla del turnero, a pantalla completa y con reconexión automática |
 
 ### App dedicada para TV (`Reciclaje TV`)
@@ -78,6 +79,11 @@ de ahí:
   botón **Descargar JSON** y autorización de desembolso.
 - **Materiales**: editar nombres y precios, agregar personalizados y eliminar
   (13 materiales precargados con precios referenciales COP/kg de Mayo 2025).
+- **Inventario**: stock de material embalado (se alimenta solo con cada pesaje como
+  *Suelto*), entradas/ajustes del inventario previo y **embalaje** en bultos/bloques/pacas.
+  **Salidas** hacia el mayorista que **descuentan el inventario** y generan un **manifiesto
+  de carga** imprimible (PDF) y descargable (JSON), con fecha, despacha/recibe/conductor y
+  la sección *Información de la carga* (código UN, designación de mercancía, etc.).
 - **Marquesina**: velocidad de desplazamiento y mensaje personalizado (teléfonos, avisos)
   que rota tras la lista completa de precios.
 
