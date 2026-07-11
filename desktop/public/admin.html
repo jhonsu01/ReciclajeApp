@@ -73,6 +73,7 @@
 <nav>
   <button data-tab="turnos" class="activo">Turnos</button>
   <button data-tab="materiales">Materiales y precios</button>
+  <button data-tab="inventario">Inventario</button>
   <button data-tab="config">Configuración</button>
   <button data-tab="acerca">Acerca de</button>
 </nav>
@@ -128,6 +129,56 @@
     <table>
       <thead><tr><th>Familia</th><th>Subcategoría</th><th>Presentación</th><th>Promedio</th><th>Mín</th><th>Máx</th><th></th></tr></thead>
       <tbody id="cuerpo-materiales"></tbody>
+    </table>
+  </div>
+
+  <div class="tab" id="tab-inventario">
+    <div class="card">
+      <b>📦 Inventario de material embalado</b>
+      <div class="hint">Se alimenta automáticamente con el material pesado (entra como
+      <b>Suelto</b>). Embálalo en bultos/bloques/pacas y genera salidas hacia el mayorista.</div>
+    </div>
+    <div class="card">
+      <b>Registrar entrada / ajustar inventario previo</b>
+      <div class="form-grid" style="margin-top:.8rem;max-width:100%;">
+        <div class="campo"><label>Material</label><select id="inv-material"></select></div>
+        <div class="campo"><label>Embalaje</label>
+          <select id="inv-embalaje"><option>Suelto</option><option>Bulto</option><option>Bloque</option><option>Paca</option><option>Compactado</option></select></div>
+        <div class="campo"><label>Peso (kg)</label><input id="inv-kg" type="number" min="0" step="0.01"></div>
+        <div class="campo"><label>Unidades (bultos, opcional)</label><input id="inv-unidades" type="number" min="0"></div>
+      </div>
+      <div class="fila-acciones">
+        <button class="accion" onclick="ajustarInv()">Ajustar (fijar total)</button>
+        <button class="accion primario" onclick="entradaInv()">+ Sumar entrada</button>
+      </div>
+    </div>
+    <div class="card">
+      <b>Embalar material suelto</b>
+      <div class="hint">Convierte kilos de <b>Suelto</b> en unidades de un embalaje.</div>
+      <div class="form-grid" style="margin-top:.8rem;max-width:100%;">
+        <div class="campo"><label>Material</label><select id="emb-material"></select></div>
+        <div class="campo"><label>Embalaje destino</label>
+          <select id="emb-destino"><option>Bulto</option><option>Bloque</option><option>Paca</option><option>Compactado</option></select></div>
+        <div class="campo"><label>Peso a embalar (kg)</label><input id="emb-kg" type="number" min="0" step="0.01"></div>
+        <div class="campo"><label>Nº de unidades resultantes</label><input id="emb-unidades" type="number" min="1"></div>
+      </div>
+      <div class="fila-acciones"><button class="accion primario" onclick="embalar()">📦 Embalar</button></div>
+    </div>
+    <div class="card"><b>Stock actual</b></div>
+    <table>
+      <thead><tr><th>Material</th><th>Embalaje</th><th>Peso (kg)</th><th>Unidades</th><th>Actualizado</th><th></th></tr></thead>
+      <tbody id="cuerpo-inventario"></tbody>
+    </table>
+
+    <div class="card" style="margin-top:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;">
+      <div><b>Salidas de material (manifiestos de carga)</b>
+        <div class="hint">Genera un despacho hacia el mayorista; descuenta el inventario y produce el manifiesto en PDF/JSON.</div>
+      </div>
+      <button class="accion primario" onclick="abrirModal('modal-salida')">🚚 Generar salida</button>
+    </div>
+    <table>
+      <thead><tr><th>Consecutivo</th><th>Fecha</th><th>Despacha</th><th>Recibe</th><th>Conductor</th><th>Total kg</th><th></th></tr></thead>
+      <tbody id="cuerpo-salidas"></tbody>
     </table>
   </div>
 
@@ -204,6 +255,69 @@
     </div>
   </div>
 </main>
+
+<!-- Modal generar salida / despacho -->
+<div class="modal-fondo" id="modal-salida">
+  <div class="modal" style="width:min(760px,94vw);">
+    <h3>🚚 Generar salida de material</h3>
+    <div class="form-grid" style="max-width:100%;">
+      <div class="campo"><label>Fecha de salida *</label><input id="sal-fecha" type="date"></div>
+      <div class="campo"><label>Despacha (quién entrega)</label><input id="sal-despacha"></div>
+      <div class="campo"><label>Recibe (mayorista)</label><input id="sal-recibe"></div>
+      <div class="campo"><label>Conductor</label><input id="sal-conductor"></div>
+      <div class="campo"><label>Documento del conductor</label><input id="sal-doc-conductor"></div>
+      <div class="campo"><label>Placa del vehículo</label><input id="sal-placa"></div>
+      <div class="campo"><label>Destino</label><input id="sal-destino"></div>
+      <div class="campo" style="grid-column:span 2;"><label>Observaciones</label><input id="sal-obs"></div>
+    </div>
+
+    <details style="margin-top:1rem;">
+      <summary style="cursor:pointer;font-weight:600;">Información de la carga (opcional — manifiesto de mercancías peligrosas)</summary>
+      <div class="form-grid" style="max-width:100%;margin-top:.6rem;">
+        <div class="campo"><label>Naturaleza de la carga</label><input id="car-naturaleza"></div>
+        <div class="campo"><label>Código producto (arancelario)</label><input id="car-codigo"></div>
+        <div class="campo"><label>Unidad de medida</label><input id="car-unidad" value="Kilogramos"></div>
+        <div class="campo"><label>Código UN (merc. peligrosa)</label><input id="car-un" placeholder="Ej: UN 3082"></div>
+        <div class="campo"><label>Estado del producto</label><input id="car-estado"></div>
+        <div class="campo"><label>Grupo de embalaje/envase</label><input id="car-grupo" placeholder="Ej: GE III"></div>
+        <div class="campo" style="grid-column:span 2;"><label>Designación de la mercancía</label><input id="car-designacion" placeholder="Ej: UN 3082, SUSTANCIA LIQUIDA PELIGROSA PARA EL MEDIO AMBIENTE N.E.P, 9, GE III"></div>
+        <div class="campo" style="grid-column:span 2;"><label>Descripción detallada del residuo peligroso</label><input id="car-descripcion"></div>
+        <div class="campo" style="grid-column:span 2;"><label>Característica de peligrosidad</label><input id="car-peligrosidad"></div>
+      </div>
+    </details>
+
+    <h4 style="margin-top:1.2rem;">Materiales a despachar</h4>
+    <div class="form-grid" style="max-width:100%;">
+      <div class="campo"><label>Ítem del inventario</label><select id="sal-item"></select></div>
+      <div class="campo"><label>Peso a sacar (kg)</label><input id="sal-item-kg" type="number" min="0" step="0.01"></div>
+      <div class="campo"><label>Unidades</label><input id="sal-item-un" type="number" min="0"></div>
+    </div>
+    <div class="fila-acciones"><button class="accion" onclick="agregarItemSalida()">+ Agregar ítem</button></div>
+    <table style="margin-top:.5rem;">
+      <thead><tr><th>Material</th><th>Embalaje</th><th>Kg</th><th>Unidades</th><th></th></tr></thead>
+      <tbody id="sal-items"></tbody>
+    </table>
+    <p style="margin-top:.6rem;text-align:right;">Total: <span class="total num" id="sal-total">0 kg</span></p>
+    <div class="fila-acciones">
+      <button class="accion" onclick="cerrarModal('modal-salida')">Cancelar</button>
+      <button class="accion primario" onclick="generarSalida()">Generar salida y descontar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal manifiesto generado -->
+<div class="modal-fondo" id="modal-manifiesto">
+  <div class="modal">
+    <h3>✓ Salida registrada — <span id="man-consecutivo"></span></h3>
+    <p class="hint">El inventario ya fue descontado. Descarga o imprime el manifiesto de carga.</p>
+    <pre class="recibo" id="man-resumen" style="max-height:40vh;"></pre>
+    <div class="fila-acciones">
+      <button class="accion" onclick="cerrarModal('modal-manifiesto')">Cerrar</button>
+      <button class="accion" onclick="descargarManifiestoJson()">⬇ Descargar JSON</button>
+      <button class="accion primario" onclick="imprimirManifiesto()">🖨 Imprimir / PDF</button>
+    </div>
+  </div>
+</div>
 
 <!-- Modal pesaje -->
 <div class="modal-fondo" id="modal-pesaje">
@@ -564,7 +678,7 @@ async function eliminarMaterial(id) {
 // ---- Config ----
 function pintarPines() {
   const p = config.pines_sesion || {};
-  const nombres = { pesaje: '⚖️ Pesaje', admin: '💵 Administrador', kiosko: '📺 Kiosko (TV)' };
+  const nombres = { pesaje: '⚖️ Pesaje', admin: '💵 Administrador', inventario: '📦 Inventario', kiosko: '📺 Kiosko (TV)' };
   $('cuerpo-pines').innerHTML = Object.keys(nombres).map(rol => `<tr>
     <td>${nombres[rol]}</td>
     <td><b style="font-size:1.2rem;letter-spacing:.15em;">${p[rol] || '—'}</b></td>
@@ -627,7 +741,7 @@ async function regenerarPinRol(rol) {
 
 async function cargarDispositivos() {
   const dispositivos = await api('/api/dispositivos');
-  const roles = { pesaje: '⚖️ Pesaje', admin: '💵 Admin', kiosko: '📺 Kiosko' };
+  const roles = { pesaje: '⚖️ Pesaje', admin: '💵 Admin', inventario: '📦 Inventario', kiosko: '📺 Kiosko' };
   $('cuerpo-dispositivos').innerHTML = dispositivos.length ? dispositivos.map(d => `<tr>
     <td>${d.nombre || 'dispositivo'}</td>
     <td>${roles[d.rol] || d.rol}</td>
@@ -657,13 +771,169 @@ function conectarWS() {
   ws.onmessage = ev => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'turnos_updated') cargarTurnos();
-    if (msg.type === 'materiales_updated') cargarMateriales();
+    if (msg.type === 'materiales_updated') { cargarMateriales(); cargarInventario(); }
+    if (msg.type === 'inventario_updated') cargarInventario();
     if (msg.type === 'dispositivos_updated') cargarDispositivos();
   };
   ws.onclose = () => setTimeout(conectarWS, 3000);
 }
 
-cargarConfig(); cargarMateriales(); cargarTurnos(); conectarWS();
+// ---- Inventario ----
+let inventarioCache = [];
+let itemsSalida = [];
+
+function abrirModal(id) { $(id).classList.add('abierto'); if (id === 'modal-salida') prepararSalida(); }
+
+async function cargarInventario() {
+  inventarioCache = await api('/api/inventario');
+  $('cuerpo-inventario').innerHTML = inventarioCache.length ? inventarioCache.map(x => `<tr>
+    <td>${x.familia} / ${x.subcategoria}</td>
+    <td>${x.embalaje}</td>
+    <td class="num">${x.peso_kg.toLocaleString('es-CO')}</td>
+    <td class="num">${x.unidades || '—'}</td>
+    <td class="num">${x.actualizado ? new Date(x.actualizado).toLocaleString('es-CO') : '—'}</td>
+    <td><button class="accion" onclick="cargarAjuste(${x.material_id}, '${x.embalaje}', ${x.peso_kg}, ${x.unidades})">Ajustar</button></td>
+  </tr>`).join('') : '<tr><td colspan="6">Sin stock todavía. Se llena con los pesajes o con entradas manuales.</td></tr>';
+
+  const opciones = materiales.map(m => `<option value="${m.id}">${m.familia} / ${m.subcategoria} (${m.presentacion})</option>`).join('');
+  $('inv-material').innerHTML = opciones;
+  $('emb-material').innerHTML = opciones;
+  await cargarSalidas();
+}
+
+function cargarAjuste(materialId, embalaje, kg, unidades) {
+  document.querySelector('nav [data-tab="inventario"]').click();
+  $('inv-material').value = materialId;
+  $('inv-embalaje').value = embalaje;
+  $('inv-kg').value = kg;
+  $('inv-unidades').value = unidades;
+  $('inv-kg').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function entradaInv() {
+  const body = { material_id: Number($('inv-material').value), embalaje: $('inv-embalaje').value,
+    peso_kg: Number($('inv-kg').value) || 0, unidades: Number($('inv-unidades').value) || 0 };
+  if (!(body.peso_kg > 0 || body.unidades > 0)) return alert('Ingresa un peso o unidades mayores que cero.');
+  await api('/api/inventario/entrada', { method: 'POST', body: JSON.stringify(body) });
+  $('inv-kg').value = ''; $('inv-unidades').value = '';
+  await cargarInventario();
+}
+
+async function ajustarInv() {
+  const body = { material_id: Number($('inv-material').value), embalaje: $('inv-embalaje').value,
+    peso_kg: Number($('inv-kg').value) || 0, unidades: Number($('inv-unidades').value) || 0 };
+  if (!confirm(`¿Fijar el stock de ese material (${body.embalaje}) en ${body.peso_kg} kg / ${body.unidades} unidades?`)) return;
+  await api('/api/inventario/ajuste', { method: 'POST', body: JSON.stringify(body) });
+  await cargarInventario();
+}
+
+async function embalar() {
+  const body = { material_id: Number($('emb-material').value), embalaje_destino: $('emb-destino').value,
+    peso_kg: Number($('emb-kg').value), unidades: Number($('emb-unidades').value) };
+  if (!(body.peso_kg > 0) || !(body.unidades > 0)) return alert('Peso y unidades deben ser mayores que cero.');
+  await api('/api/inventario/embalaje', { method: 'POST', body: JSON.stringify(body) });
+  $('emb-kg').value = ''; $('emb-unidades').value = '';
+  await cargarInventario();
+  alert('Material embalado ✓');
+}
+
+// ---- Salidas ----
+async function cargarSalidas() {
+  const salidas = await api('/api/salidas');
+  $('cuerpo-salidas').innerHTML = salidas.length ? salidas.map(s => `<tr>
+    <td><b>${s.consecutivo}</b></td>
+    <td>${s.fecha_salida}</td>
+    <td>${s.despacha || '—'}</td>
+    <td>${s.recibe || '—'}</td>
+    <td>${s.conductor || '—'}</td>
+    <td class="num">${(s.total_kg || 0).toLocaleString('es-CO')}</td>
+    <td style="white-space:nowrap;">
+      <button class="accion" onclick="descargarSalidaJson(${s.id})">JSON</button>
+      <button class="accion" onclick="window.open('/manifiesto.html?id=${s.id}','_blank')">🖨 PDF</button>
+    </td>
+  </tr>`).join('') : '<tr><td colspan="7">Aún no hay salidas registradas.</td></tr>';
+}
+
+function prepararSalida() {
+  itemsSalida = [];
+  $('sal-fecha').value = new Date().toISOString().slice(0, 10);
+  $('sal-item').innerHTML = inventarioCache.filter(x => x.peso_kg > 0).map(x =>
+    `<option value="${x.material_id}|${x.embalaje}">${x.familia} / ${x.subcategoria} — ${x.embalaje} (${x.peso_kg} kg, ${x.unidades} u)</option>`).join('')
+    || '<option value="">Sin stock disponible</option>';
+  pintarItemsSalida();
+}
+
+function agregarItemSalida() {
+  const val = $('sal-item').value;
+  if (!val) return;
+  const [material_id, embalaje] = val.split('|');
+  const kg = Number($('sal-item-kg').value);
+  const unidades = Number($('sal-item-un').value) || 0;
+  if (!(kg > 0)) return alert('Ingresa el peso a sacar.');
+  const stock = inventarioCache.find(x => x.material_id === Number(material_id) && x.embalaje === embalaje);
+  if (stock && kg > stock.peso_kg) return alert(`Solo hay ${stock.peso_kg} kg de ese ítem.`);
+  const etiqueta = stock ? `${stock.familia} / ${stock.subcategoria}` : material_id;
+  itemsSalida.push({ material_id: Number(material_id), embalaje, peso_kg: kg, unidades, etiqueta });
+  $('sal-item-kg').value = ''; $('sal-item-un').value = '';
+  pintarItemsSalida();
+}
+
+function pintarItemsSalida() {
+  $('sal-items').innerHTML = itemsSalida.map((it, i) => `<tr>
+    <td>${it.etiqueta}</td><td>${it.embalaje}</td><td class="num">${it.peso_kg}</td><td class="num">${it.unidades || '—'}</td>
+    <td><button class="accion peligro" onclick="quitarItemSalida(${i})">Quitar</button></td>
+  </tr>`).join('') || '<tr><td colspan="5">Agrega los materiales a despachar.</td></tr>';
+  $('sal-total').textContent = itemsSalida.reduce((s, it) => s + it.peso_kg, 0).toLocaleString('es-CO') + ' kg';
+}
+
+function quitarItemSalida(i) { itemsSalida.splice(i, 1); pintarItemsSalida(); }
+
+let manifiestoActual = null;
+
+async function generarSalida() {
+  if (!$('sal-fecha').value) return alert('La fecha de salida es obligatoria.');
+  if (!itemsSalida.length) return alert('Agrega al menos un material.');
+  const body = {
+    fecha_salida: $('sal-fecha').value,
+    despacha: $('sal-despacha').value.trim(), recibe: $('sal-recibe').value.trim(),
+    conductor: $('sal-conductor').value.trim(), documento_conductor: $('sal-doc-conductor').value.trim(),
+    vehiculo_placa: $('sal-placa').value.trim(), destino: $('sal-destino').value.trim(),
+    observaciones: $('sal-obs').value.trim(),
+    carga: {
+      naturaleza: $('car-naturaleza').value.trim(), codigo_producto: $('car-codigo').value.trim(),
+      unidad_medida: $('car-unidad').value.trim(), codigo_un: $('car-un').value.trim(),
+      estado_producto: $('car-estado').value.trim(), grupo_embalaje: $('car-grupo').value.trim(),
+      designacion_mercancia: $('car-designacion').value.trim(), descripcion_residuo: $('car-descripcion').value.trim(),
+      caracteristica_peligrosidad: $('car-peligrosidad').value.trim(),
+    },
+    items: itemsSalida.map(({ material_id, embalaje, peso_kg, unidades }) => ({ material_id, embalaje, peso_kg, unidades })),
+  };
+  manifiestoActual = await api('/api/salidas', { method: 'POST', body: JSON.stringify(body) });
+  cerrarModal('modal-salida');
+  $('man-consecutivo').textContent = manifiestoActual.consecutivo;
+  $('man-resumen').textContent = JSON.stringify(manifiestoActual, null, 2);
+  $('modal-manifiesto').classList.add('abierto');
+  await cargarInventario();
+}
+
+function descargarBlob(obj, nombre) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nombre; a.click();
+  URL.revokeObjectURL(a.href);
+}
+function descargarManifiestoJson() {
+  if (manifiestoActual) descargarBlob(manifiestoActual, `manifiesto-${manifiestoActual.consecutivo}.json`);
+}
+function imprimirManifiesto() {
+  if (manifiestoActual) window.open(`/manifiesto.html?id=${manifiestoActual.id}`, '_blank');
+}
+async function descargarSalidaJson(id) {
+  const s = await api(`/api/salidas/${id}`);
+  descargarBlob(s, `manifiesto-${s.consecutivo}.json`);
+}
+
+cargarConfig(); cargarMateriales(); cargarTurnos(); cargarInventario(); conectarWS();
 setInterval(cargarTurnos, 20000);
 
 // Versión para la pestaña "Acerca de"

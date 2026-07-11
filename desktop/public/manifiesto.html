@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manifiesto de carga</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; margin: 24px; font-size: 13px; }
+  .barra { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .barra button { padding: .5rem 1rem; border: 1px solid #16A34A; background: #16A34A; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #555; margin-bottom: 12px; }
+  .seccion { border: 1px solid #333; margin-bottom: 10px; }
+  .seccion > .titulo { background: #DCFCE7; font-weight: 700; padding: 5px 8px; border-bottom: 1px solid #333; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { border: 1px solid #999; padding: 5px 8px; vertical-align: top; }
+  th { background: #F0FDF4; text-align: left; }
+  .campo-label { background: #F7F7F7; font-weight: 600; width: 24%; }
+  .firma { margin-top: 8px; font-size: 10px; color: #777; word-break: break-all; }
+  .firmas { display: flex; gap: 24px; margin-top: 40px; }
+  .firmas div { flex: 1; border-top: 1px solid #333; padding-top: 4px; text-align: center; }
+  @media print { .barra { display: none; } body { margin: 0; } }
+</style>
+</head>
+<body>
+  <div class="barra">
+    <span>Manifiesto de carga — Reciclaje Turnero</span>
+    <button onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+  </div>
+  <div id="contenido">Cargando…</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const id = params.get('id');
+const fmt = n => Number(n || 0).toLocaleString('es-CO');
+const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+function fila(label, valor) {
+  return `<tr><td class="campo-label">${label}</td><td colspan="3">${esc(valor) || '—'}</td></tr>`;
+}
+function fila2(l1, v1, l2, v2) {
+  return `<tr><td class="campo-label">${l1}</td><td>${esc(v1) || '—'}</td><td class="campo-label">${l2}</td><td>${esc(v2) || '—'}</td></tr>`;
+}
+
+fetch(`/api/salidas/${id}`).then(r => r.json()).then(m => {
+  document.title = `Manifiesto ${m.consecutivo}`;
+  const c = m.carga || {};
+  const items = (m.items || []).map(it => `<tr>
+    <td>${esc(it.material)}</td><td>${esc(it.embalaje)}</td>
+    <td style="text-align:right;">${fmt(it.peso_kg)}</td>
+    <td style="text-align:right;">${it.unidades || '—'}</td></tr>`).join('');
+
+  document.getElementById('contenido').innerHTML = `
+    <h1>MANIFIESTO DE CARGA — ${esc(m.consecutivo)}</h1>
+    <div class="sub">${esc(m.centro || 'Centro de Reciclaje')} · Fecha de salida: <b>${esc(m.fecha_salida)}</b></div>
+
+    <div class="seccion">
+      <div class="titulo">DATOS DEL DESPACHO</div>
+      <table>
+        ${fila2('Despacha', m.despacha, 'Recibe', m.recibe)}
+        ${fila2('Conductor', m.conductor, 'Documento conductor', m.documento_conductor)}
+        ${fila2('Placa del vehículo', m.vehiculo_placa, 'Destino', m.destino)}
+        ${fila('Observaciones', m.observaciones)}
+      </table>
+    </div>
+
+    <div class="seccion">
+      <div class="titulo">INFORMACIÓN DE LA CARGA</div>
+      <table>
+        ${fila2('Naturaleza Carga', c.naturaleza, 'Código Producto (Arancelario)', c.codigo_producto)}
+        ${fila2('Cantidad en Kilogramos', fmt(m.total_kg), 'Unidad Medida Mercancía', c.unidad_medida)}
+        ${fila2('Código UN (Merc. Peligrosa)', c.codigo_un, 'Estado del producto', c.estado_producto)}
+        ${fila2('Cantidad Unidad Mercancía', m.total_unidades || '—', 'Grupo embalaje envase', c.grupo_embalaje)}
+        ${fila('Designación Mercancía', c.designacion_mercancia)}
+        ${fila('Descripción detallada Residuo Peligroso', c.descripcion_residuo)}
+        ${fila('Característica Peligrosidad', c.caracteristica_peligrosidad)}
+      </table>
+    </div>
+
+    <div class="seccion">
+      <div class="titulo">MATERIALES DESPACHADOS</div>
+      <table>
+        <thead><tr><th>Material</th><th>Embalaje</th><th style="text-align:right;">Peso (kg)</th><th style="text-align:right;">Unidades</th></tr></thead>
+        <tbody>${items}</tbody>
+        <tfoot><tr><th colspan="2" style="text-align:right;">TOTAL</th>
+          <th style="text-align:right;">${fmt(m.total_kg)}</th><th style="text-align:right;">${m.total_unidades || '—'}</th></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="firmas">
+      <div>${esc(m.despacha) || ''}<br>Despacha</div>
+      <div>${esc(m.conductor) || ''}<br>Conductor</div>
+      <div>${esc(m.recibe) || ''}<br>Recibe</div>
+    </div>
+    <p class="firma">Firma digital (HMAC-SHA256): ${esc(m.firma)}</p>
+  `;
+}).catch(() => { document.getElementById('contenido').textContent = 'No se pudo cargar el manifiesto.'; });
+</script>
+</body>
+</html>
