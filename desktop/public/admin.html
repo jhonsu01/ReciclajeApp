@@ -316,7 +316,7 @@ function pintarTurnos() {
     if (filtroEstado === 'PAGADO') return t.estado === 'FINALIZADO' && !!t.pagado;
     if (filtroEstado) return t.estado === filtroEstado;
     return true;
-  });
+  }).sort((a, b) => b.numero - a.numero); // el más reciente arriba
   $('cuerpo-turnos').innerHTML = filtrados.length ? filtrados.map(t => {
     const mat = t.familia ? `${t.familia} / ${t.subcategoria}` : '—';
     const acciones = [];
