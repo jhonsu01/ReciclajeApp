@@ -4,6 +4,18 @@ Todas las novedades relevantes de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.7.0] - 2026-07-11
+
+### Añadido
+
+- **Apoyo / donaciones (Ko-fi)**:
+  - Botón de Ko-fi y enlace al repositorio al final del README.
+  - Nueva pestaña **"Acerca de"** en el panel de escritorio (MSI) con la versión, el
+    repositorio y el botón de Ko-fi (los enlaces abren en el navegador del sistema).
+  - Sección de apoyo con botón de Ko-fi al final de la pantalla de inicio de la app
+    completa **Reciclaje Turnero**.
+- No se incluye en los APK **Reciclaje Cliente** ni **Reciclaje TV** (kiosko).
+
 ## [0.6.0] - 2026-07-10
 
 ### Añadido
