@@ -57,7 +57,7 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
   // El emparejamiento entrega un token persistente por dispositivo, revocable
   // desde el panel. El rol cliente no requiere PIN: se identifica con su documento.
   const generarPin = () => String(Math.floor(100000 + Math.random() * 900000));
-  const pinsSesion = { pesaje: generarPin(), admin: generarPin(), kiosko: generarPin() };
+  const pinsSesion = { pesaje: generarPin(), admin: generarPin(), inventario: generarPin(), kiosko: generarPin() };
   const regenerarPins = () => {
     for (const rol of Object.keys(pinsSesion)) pinsSesion[rol] = generarPin();
   };
@@ -102,8 +102,8 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
   // Emparejamiento de roles elevados: PIN de sesión -> token persistente
   app.post('/api/emparejar', (req, res) => {
     const { rol, pin, nombre } = req.body || {};
-    if (!['pesaje', 'admin', 'kiosko'].includes(rol)) {
-      return res.status(400).json({ error: 'rol debe ser pesaje, admin o kiosko' });
+    if (!['pesaje', 'admin', 'inventario', 'kiosko'].includes(rol)) {
+      return res.status(400).json({ error: 'rol debe ser pesaje, admin, inventario o kiosko' });
     }
     if (String(pin) !== pinsSesion[rol]) {
       return res.status(401).json({ error: 'PIN de emparejamiento incorrecto para ese rol' });
@@ -260,6 +260,62 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
     res.json(db.getPagosDeUsuario(tipo_documento, String(numero_documento)));
   });
 
+  // ---- Inventario (material embalado listo para vender) ----
+  app.get('/api/inventario', conToken('inventario'), (_req, res) => res.json(db.getInventario()));
+
+  app.post('/api/inventario/entrada', conToken('inventario'), (req, res) => {
+    const { material_id, embalaje, peso_kg, unidades, motivo, usuario } = req.body || {};
+    if (!material_id || !(Number(peso_kg) > 0 || Number(unidades) > 0)) {
+      return res.status(400).json({ error: 'material_id y peso_kg o unidades (> 0) son obligatorios' });
+    }
+    db.entradaInventario({
+      material_id: Number(material_id), embalaje: embalaje || 'Suelto',
+      peso_kg: Number(peso_kg) || 0, unidades: Number(unidades) || 0,
+      tipo: 'ENTRADA', motivo: motivo || 'Entrada manual', usuario: usuario || 'inventario',
+    });
+    broadcast('inventario_updated');
+    res.json(db.getInventario());
+  });
+
+  app.post('/api/inventario/ajuste', conToken('inventario'), (req, res) => {
+    const { material_id, embalaje, peso_kg, unidades, motivo, usuario } = req.body || {};
+    if (!material_id) return res.status(400).json({ error: 'material_id es obligatorio' });
+    db.ajustarInventario({
+      material_id: Number(material_id), embalaje: embalaje || 'Suelto',
+      peso_kg: Number(peso_kg) || 0, unidades: Number(unidades) || 0,
+      motivo: motivo || 'Ajuste manual', usuario: usuario || 'inventario',
+    });
+    broadcast('inventario_updated');
+    res.json(db.getInventario());
+  });
+
+  app.post('/api/inventario/embalaje', conToken('inventario'), (req, res) => {
+    const { material_id, embalaje_destino, peso_kg, unidades, usuario } = req.body || {};
+    const r = db.embalar({
+      material_id: Number(material_id), embalaje_destino,
+      peso_kg: Number(peso_kg), unidades: Number(unidades), usuario: usuario || 'inventario',
+    });
+    if (r.error) return res.status(400).json(r);
+    broadcast('inventario_updated');
+    res.json(r);
+  });
+
+  // ---- Salidas / despachos (manifiesto de carga) ----
+  app.get('/api/salidas', conToken('inventario'), (_req, res) => res.json(db.getSalidas()));
+
+  app.get('/api/salidas/:id', conToken('inventario'), (req, res) => {
+    const s = db.getSalida(Number(req.params.id));
+    if (!s) return res.status(404).json({ error: 'Salida no encontrada' });
+    res.json(s);
+  });
+
+  app.post('/api/salidas', conToken('inventario'), (req, res) => {
+    const r = db.crearSalida(req.body || {});
+    if (r.error) return res.status(400).json(r);
+    broadcast('inventario_updated');
+    res.status(201).json(r);
+  });
+
   // ---- Gestión de dispositivos emparejados (solo panel local) ----
   app.get('/api/dispositivos', soloAdmin, (_req, res) => res.json(db.getDispositivos()));
 
@@ -286,8 +342,8 @@ async function crearServidor({ dbPath, puerto = 3000 }) {
   // Regenera el PIN de sesión de un solo rol (pesaje, admin o kiosko)
   app.post('/api/config/regenerar-pin/:rol', soloAdmin, (req, res) => {
     const rol = req.params.rol;
-    if (!['pesaje', 'admin', 'kiosko'].includes(rol)) {
-      return res.status(400).json({ error: 'rol debe ser pesaje, admin o kiosko' });
+    if (!['pesaje', 'admin', 'inventario', 'kiosko'].includes(rol)) {
+      return res.status(400).json({ error: 'rol debe ser pesaje, admin, inventario o kiosko' });
     }
     pinsSesion[rol] = generarPin();
     res.json({ rol, pin: pinsSesion[rol], pines_sesion: pinsSesion });

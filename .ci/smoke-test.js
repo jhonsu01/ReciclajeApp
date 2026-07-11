@@ -145,6 +145,67 @@ const { crearServidor } = require(path.join(__dirname, '..', 'desktop', 'src', '
   if (r.status !== 200) throw new Error('eliminar material falló');
   console.log('materiales personalizados OK');
 
+  // Inventario: el pesaje ya alimentó el stock (2.5 kg de material 1 en Suelto)
+  const mat1 = mats[0].id;
+  let inv = await (await fetch(base + '/api/inventario')).json();
+  const suelto = inv.find(x => x.material_id === mat1 && x.embalaje === 'Suelto');
+  if (!suelto || suelto.peso_kg < 2.5) throw new Error('el pesaje no alimentó el inventario');
+  console.log('inventario alimentado por pesaje OK:', suelto.peso_kg, 'kg suelto');
+
+  // Entrada manual de inventario previo
+  r = await fetch(base + '/api/inventario/entrada', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ material_id: mat1, embalaje: 'Suelto', peso_kg: 100 }),
+  });
+  if (r.status !== 200) throw new Error('entrada de inventario falló');
+
+  // Embalar 80 kg de Suelto en 2 bultos
+  r = await fetch(base + '/api/inventario/embalaje', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ material_id: mat1, embalaje_destino: 'Bulto', peso_kg: 80, unidades: 2 }),
+  });
+  if (r.status !== 200) throw new Error('embalaje falló');
+  inv = await (await fetch(base + '/api/inventario')).json();
+  const bulto = inv.find(x => x.material_id === mat1 && x.embalaje === 'Bulto');
+  if (!bulto || bulto.peso_kg !== 80 || bulto.unidades !== 2) throw new Error('embalaje no cuadró');
+  console.log('entrada + embalaje OK: 2 bultos de 80 kg');
+
+  // Embalar más de lo disponible debe rechazarse
+  r = await fetch(base + '/api/inventario/embalaje', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ material_id: mat1, embalaje_destino: 'Bloque', peso_kg: 999999, unidades: 1 }),
+  });
+  if (r.status !== 400) throw new Error('embalaje sobre stock no fue rechazado');
+  console.log('embalaje sobre stock rechazado OK');
+
+  // Salida / despacho con manifiesto: saca 1 bulto (40 kg)
+  r = await fetch(base + '/api/salidas', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fecha_salida: '2026-07-11', despacha: 'Operador', recibe: 'Mayorista SA',
+      conductor: 'Juan', vehiculo_placa: 'ABC123', destino: 'Bogotá',
+      carga: { naturaleza: 'Reciclable', designacion_mercancia: 'UN 3082' },
+      items: [{ material_id: mat1, embalaje: 'Bulto', peso_kg: 40, unidades: 1 }],
+    }),
+  });
+  const salida = await j(r);
+  if (r.status !== 201 || !salida.firma || !salida.consecutivo || salida.total_kg !== 40) throw new Error('crear salida falló');
+  console.log('salida con manifiesto OK:', salida.consecutivo, '- descuenta', salida.total_kg, 'kg');
+
+  // El inventario se descontó (quedan 40 kg y 1 bulto)
+  inv = await (await fetch(base + '/api/inventario')).json();
+  const bulto2 = inv.find(x => x.material_id === mat1 && x.embalaje === 'Bulto');
+  if (!bulto2 || bulto2.peso_kg !== 40 || bulto2.unidades !== 1) throw new Error('la salida no descontó el inventario');
+  console.log('descuento de inventario por salida OK: quedan', bulto2.peso_kg, 'kg,', bulto2.unidades, 'bulto');
+
+  // Salida sobre stock rechazada (no descuenta nada)
+  r = await fetch(base + '/api/salidas', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fecha_salida: '2026-07-11', items: [{ material_id: mat1, embalaje: 'Bulto', peso_kg: 99999 }] }),
+  });
+  if (r.status !== 400) throw new Error('salida sobre stock no fue rechazada');
+  console.log('salida sobre stock rechazada OK');
+
   // Autodescubrimiento UDP
   await new Promise((resolve, reject) => {
     const dgram = require('dgram');

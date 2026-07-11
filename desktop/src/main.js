@@ -26,8 +26,13 @@ async function iniciar() {
   });
   win.loadURL(`http://127.0.0.1:${PUERTO}/admin.html`);
 
-  // Los enlaces externos (Ko-fi, repositorio) se abren en el navegador del sistema
+  // Las ventanas locales (manifiesto de carga) se abren dentro de la app; los
+  // enlaces externos (Ko-fi, repositorio) se abren en el navegador del sistema.
   win.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const u = new URL(url);
+      if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') return { action: 'allow' };
+    } catch (e) { /* url relativa/no parseable */ }
     if (/^https?:\/\//.test(url)) { shell.openExternal(url); return { action: 'deny' }; }
     return { action: 'allow' };
   });

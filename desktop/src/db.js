@@ -64,11 +64,58 @@ CREATE TABLE IF NOT EXISTS recibos (
 CREATE TABLE IF NOT EXISTS dispositivos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   token TEXT NOT NULL UNIQUE,
-  rol TEXT NOT NULL CHECK (rol IN ('pesaje','admin','kiosko')),
+  rol TEXT NOT NULL CHECK (rol IN ('pesaje','admin','kiosko','inventario')),
   nombre TEXT,
   creado TEXT NOT NULL,
   ultimo_acceso TEXT,
   activo INTEGER NOT NULL DEFAULT 1
+);
+-- Stock de material embalado/compactado listo para la venta al mayorista.
+-- Una fila por (material + tipo de embalaje).
+CREATE TABLE IF NOT EXISTS inventario (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  material_id INTEGER NOT NULL REFERENCES materiales(id),
+  embalaje TEXT NOT NULL DEFAULT 'Suelto',
+  peso_kg REAL NOT NULL DEFAULT 0,
+  unidades INTEGER NOT NULL DEFAULT 0,
+  actualizado TEXT,
+  UNIQUE (material_id, embalaje)
+);
+CREATE TABLE IF NOT EXISTS movimientos_inventario (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  inventario_id INTEGER REFERENCES inventario(id),
+  tipo TEXT NOT NULL CHECK (tipo IN ('ENTRADA','AJUSTE','EMBALAJE','SALIDA')),
+  delta_kg REAL NOT NULL DEFAULT 0,
+  delta_unidades INTEGER NOT NULL DEFAULT 0,
+  motivo TEXT,
+  usuario TEXT,
+  fecha TEXT NOT NULL,
+  salida_id INTEGER
+);
+CREATE TABLE IF NOT EXISTS salidas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  consecutivo TEXT NOT NULL,
+  fecha_salida TEXT NOT NULL,
+  despacha TEXT,
+  recibe TEXT,
+  conductor TEXT,
+  documento_conductor TEXT,
+  vehiculo_placa TEXT,
+  destino TEXT,
+  observaciones TEXT,
+  carga_json TEXT,
+  total_kg REAL NOT NULL DEFAULT 0,
+  json TEXT NOT NULL,
+  firma TEXT NOT NULL,
+  creado TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS salida_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  salida_id INTEGER NOT NULL REFERENCES salidas(id),
+  material_id INTEGER NOT NULL REFERENCES materiales(id),
+  embalaje TEXT NOT NULL,
+  peso_kg REAL NOT NULL,
+  unidades INTEGER NOT NULL DEFAULT 0
 );
 `;
 
@@ -129,6 +176,21 @@ class Db {
     const colsMat = this.query('PRAGMA table_info(materiales)').map(c => c.name);
     if (!colsMat.includes('activo')) {
       this.run('ALTER TABLE materiales ADD COLUMN activo INTEGER NOT NULL DEFAULT 1');
+    }
+    // v0.8.0: el CHECK de dispositivos.rol debe aceptar 'inventario'
+    const def = this.query(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='dispositivos'")[0];
+    if (def && !def.sql.includes('inventario')) {
+      this.run('ALTER TABLE dispositivos RENAME TO dispositivos_old');
+      this.run(`CREATE TABLE dispositivos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT NOT NULL UNIQUE,
+        rol TEXT NOT NULL CHECK (rol IN ('pesaje','admin','kiosko','inventario')),
+        nombre TEXT, creado TEXT NOT NULL, ultimo_acceso TEXT,
+        activo INTEGER NOT NULL DEFAULT 1)`);
+      this.run(`INSERT INTO dispositivos (id, token, rol, nombre, creado, ultimo_acceso, activo)
+                SELECT id, token, rol, nombre, creado, ultimo_acceso, activo FROM dispositivos_old`);
+      this.run('DROP TABLE dispositivos_old');
     }
   }
 
@@ -321,6 +383,13 @@ class Db {
       `INSERT INTO pesajes (turno_id, material_id, peso_kg, precio_kg, valor_total, usuario_pesador, fecha)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [turno_id, material_id, peso_kg, precio, valor, usuario_pesador, new Date().toISOString()]);
+    // El material comprado entra al inventario como "Suelto" (alimentación automática)
+    const turno = this.query('SELECT numero FROM turnos WHERE id = ?', [turno_id])[0];
+    this.entradaInventario({
+      material_id, embalaje: 'Suelto', peso_kg, unidades: 0,
+      tipo: 'ENTRADA', motivo: `Pesaje turno ${turno ? turno.numero : turno_id}`,
+      usuario: usuario_pesador, guardar: false,
+    });
     this.save();
     return this.getPesajes(turno_id);
   }
@@ -456,6 +525,172 @@ class Db {
       [autorizadoPor, new Date().toISOString(), turno_id]);
     this.save();
     return this.getRecibo(turno_id);
+  }
+
+  // ---- Inventario (material embalado listo para vender) ----
+  getInventario() {
+    return this.query(
+      `SELECT inv.*, m.familia, m.subcategoria, m.presentacion
+       FROM inventario inv JOIN materiales m ON m.id = inv.material_id
+       WHERE inv.peso_kg > 0 OR inv.unidades > 0
+       ORDER BY m.familia, m.subcategoria, inv.embalaje`);
+  }
+
+  _filaInventario(material_id, embalaje) {
+    let fila = this.query(
+      'SELECT * FROM inventario WHERE material_id = ? AND embalaje = ?', [material_id, embalaje])[0];
+    if (!fila) {
+      this.run('INSERT INTO inventario (material_id, embalaje, peso_kg, unidades, actualizado) VALUES (?, ?, 0, 0, ?)',
+        [material_id, embalaje, new Date().toISOString()]);
+      fila = this.query('SELECT * FROM inventario WHERE material_id = ? AND embalaje = ?', [material_id, embalaje])[0];
+    }
+    return fila;
+  }
+
+  _movimiento(inventario_id, tipo, delta_kg, delta_unidades, motivo, usuario, salida_id = null) {
+    this.run(
+      `INSERT INTO movimientos_inventario (inventario_id, tipo, delta_kg, delta_unidades, motivo, usuario, fecha, salida_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [inventario_id, tipo, delta_kg, delta_unidades, motivo || '', usuario || 'sistema', new Date().toISOString(), salida_id]);
+  }
+
+  /** Suma material a una fila de inventario (entrada de material recibido). */
+  entradaInventario({ material_id, embalaje = 'Suelto', peso_kg = 0, unidades = 0, tipo = 'ENTRADA', motivo = '', usuario = 'inventario', guardar = true }) {
+    const fila = this._filaInventario(material_id, embalaje);
+    this.run('UPDATE inventario SET peso_kg = peso_kg + ?, unidades = unidades + ?, actualizado = ? WHERE id = ?',
+      [peso_kg, unidades, new Date().toISOString(), fila.id]);
+    this._movimiento(fila.id, tipo, peso_kg, unidades, motivo, usuario);
+    if (guardar) this.save();
+    return this.query('SELECT * FROM inventario WHERE id = ?', [fila.id])[0];
+  }
+
+  /** Fija el stock absoluto de una fila (ajuste de inventario previo). */
+  ajustarInventario({ material_id, embalaje = 'Suelto', peso_kg = 0, unidades = 0, motivo = 'Ajuste manual', usuario = 'inventario' }) {
+    const fila = this._filaInventario(material_id, embalaje);
+    const dKg = peso_kg - fila.peso_kg;
+    const dU = unidades - fila.unidades;
+    this.run('UPDATE inventario SET peso_kg = ?, unidades = ?, actualizado = ? WHERE id = ?',
+      [Math.max(0, peso_kg), Math.max(0, unidades), new Date().toISOString(), fila.id]);
+    this._movimiento(fila.id, 'AJUSTE', dKg, dU, motivo, usuario);
+    this.save();
+    return this.query('SELECT * FROM inventario WHERE id = ?', [fila.id])[0];
+  }
+
+  /** Convierte peso "Suelto" en N unidades de un embalaje (bultos/bloques/pacas). */
+  embalar({ material_id, embalaje_destino, peso_kg, unidades, usuario = 'inventario' }) {
+    if (!(peso_kg > 0) || !(unidades > 0)) return { error: 'Peso y unidades deben ser mayores que cero' };
+    if (embalaje_destino === 'Suelto') return { error: 'Elige un embalaje distinto de Suelto' };
+    const suelto = this._filaInventario(material_id, 'Suelto');
+    if (suelto.peso_kg < peso_kg) {
+      return { error: `No hay suficiente material suelto (hay ${suelto.peso_kg} kg, se piden ${peso_kg})` };
+    }
+    // Sale de Suelto, entra al embalaje destino
+    this.run('UPDATE inventario SET peso_kg = peso_kg - ?, actualizado = ? WHERE id = ?',
+      [peso_kg, new Date().toISOString(), suelto.id]);
+    this._movimiento(suelto.id, 'EMBALAJE', -peso_kg, 0, `Embalado a ${embalaje_destino}`, usuario);
+    const destino = this._filaInventario(material_id, embalaje_destino);
+    this.run('UPDATE inventario SET peso_kg = peso_kg + ?, unidades = unidades + ?, actualizado = ? WHERE id = ?',
+      [peso_kg, unidades, new Date().toISOString(), destino.id]);
+    this._movimiento(destino.id, 'EMBALAJE', peso_kg, unidades, `${unidades} ${embalaje_destino} desde Suelto`, usuario);
+    this.save();
+    return this.getInventario();
+  }
+
+  // ---- Salidas / despachos (manifiesto de carga) ----
+  getSalidas() {
+    return this.query('SELECT id, consecutivo, fecha_salida, despacha, recibe, conductor, destino, total_kg, creado FROM salidas ORDER BY id DESC LIMIT 100');
+  }
+
+  getSalida(id) {
+    const s = this.query('SELECT * FROM salidas WHERE id = ?', [id])[0];
+    if (!s) return null;
+    return { ...JSON.parse(s.json), firma: s.firma };
+  }
+
+  /**
+   * Registra una salida de material: valida stock, descuenta el inventario y
+   * genera el manifiesto de carga firmado. items: [{material_id, embalaje, peso_kg, unidades}].
+   */
+  crearSalida({ fecha_salida, despacha, recibe, conductor, documento_conductor, vehiculo_placa, destino, observaciones, carga = {}, items = [], usuario = 'inventario' }) {
+    if (!fecha_salida) return { error: 'La fecha de salida es obligatoria' };
+    if (!Array.isArray(items) || items.length === 0) return { error: 'Agrega al menos un material a la salida' };
+
+    // Validación previa: no descontar nada si algún ítem no tiene stock
+    const detalle = [];
+    for (const it of items) {
+      const material = this.query('SELECT * FROM materiales WHERE id = ?', [it.material_id])[0];
+      if (!material) return { error: 'Material inexistente en la salida' };
+      const embalaje = it.embalaje || 'Suelto';
+      const peso = Number(it.peso_kg) || 0;
+      const unidades = Number(it.unidades) || 0;
+      if (peso <= 0) return { error: `El peso de ${material.familia}/${material.subcategoria} debe ser mayor que cero` };
+      const fila = this._filaInventario(material.id, embalaje);
+      if (fila.peso_kg < peso) {
+        return { error: `Stock insuficiente de ${material.familia}/${material.subcategoria} (${embalaje}): hay ${fila.peso_kg} kg, se piden ${peso}` };
+      }
+      detalle.push({ fila, material, embalaje, peso, unidades });
+    }
+
+    const totalKg = detalle.reduce((s, d) => s + d.peso, 0);
+    const hoy = new Date().toISOString().slice(0, 10);
+    const nDia = (this.query('SELECT COUNT(*) AS c FROM salidas WHERE substr(fecha_salida,1,10) = ?', [hoy])[0].c) + 1;
+    const consecutivo = `SAL-${hoy.replace(/-/g, '')}-${String(nDia).padStart(3, '0')}`;
+
+    const manifiesto = {
+      consecutivo,
+      fecha_salida,
+      centro: this.getConfig('nombre_centro'),
+      despacha: despacha || '',
+      recibe: recibe || '',
+      conductor: conductor || '',
+      documento_conductor: documento_conductor || '',
+      vehiculo_placa: vehiculo_placa || '',
+      destino: destino || '',
+      observaciones: observaciones || '',
+      carga: {
+        naturaleza: carga.naturaleza || '',
+        codigo_producto: carga.codigo_producto || '',
+        unidad_medida: carga.unidad_medida || 'Kilogramos',
+        codigo_un: carga.codigo_un || '',
+        estado_producto: carga.estado_producto || '',
+        grupo_embalaje: carga.grupo_embalaje || '',
+        designacion_mercancia: carga.designacion_mercancia || '',
+        descripcion_residuo: carga.descripcion_residuo || '',
+        caracteristica_peligrosidad: carga.caracteristica_peligrosidad || '',
+      },
+      items: detalle.map(d => ({
+        material: `${d.material.familia} / ${d.material.subcategoria}`,
+        embalaje: d.embalaje,
+        peso_kg: d.peso,
+        unidades: d.unidades,
+      })),
+      total_kg: totalKg,
+      total_unidades: detalle.reduce((s, d) => s + d.unidades, 0),
+      generado: new Date().toISOString(),
+    };
+    const json = JSON.stringify(manifiesto);
+    const firma = crypto.createHmac('sha256', this.getConfig('secreto_firma') || 'reciclaje')
+      .update(json).digest('hex');
+
+    this.run(
+      `INSERT INTO salidas (consecutivo, fecha_salida, despacha, recibe, conductor, documento_conductor,
+        vehiculo_placa, destino, observaciones, carga_json, total_kg, json, firma, creado)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [consecutivo, fecha_salida, manifiesto.despacha, manifiesto.recibe, manifiesto.conductor,
+       manifiesto.documento_conductor, manifiesto.vehiculo_placa, manifiesto.destino,
+       manifiesto.observaciones, JSON.stringify(manifiesto.carga), totalKg, json, firma, new Date().toISOString()]);
+    const salidaId = this.query('SELECT id FROM salidas ORDER BY id DESC LIMIT 1')[0].id;
+
+    // Descuento efectivo del inventario + items + movimientos
+    for (const d of detalle) {
+      this.run('UPDATE inventario SET peso_kg = MAX(0, peso_kg - ?), unidades = MAX(0, unidades - ?), actualizado = ? WHERE id = ?',
+        [d.peso, d.unidades, new Date().toISOString(), d.fila.id]);
+      this.run('INSERT INTO salida_items (salida_id, material_id, embalaje, peso_kg, unidades) VALUES (?, ?, ?, ?, ?)',
+        [salidaId, d.material.id, d.embalaje, d.peso, d.unidades]);
+      this._movimiento(d.fila.id, 'SALIDA', -d.peso, -d.unidades, `Salida ${consecutivo}`, usuario, salidaId);
+    }
+    this.save();
+    return { ...manifiesto, id: salidaId, firma };
   }
 }
 
