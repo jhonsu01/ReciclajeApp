@@ -4,6 +4,25 @@ Todas las novedades relevantes de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.8.0] - 2026-07-11
+
+### Añadido
+
+- **Inventario de material embalado**: nueva pestaña **Inventario** en el panel (a la
+  derecha de "Materiales y precios").
+  - Se **alimenta automáticamente** con el material pesado (entra como *Suelto*).
+  - Permite **registrar entradas y ajustar** el inventario previo (stock de antes).
+  - **Embalaje/compactado**: convierte kilos sueltos en bultos, bloques, pacas o
+    compactado (unidades con peso), listos para carga.
+- **Salidas de material con manifiesto de carga**: generación de despachos hacia el
+  mayorista desde el panel. Al confirmar, **descuenta el inventario** y produce un
+  **manifiesto imprimible (PDF)** y **descargable (JSON)** — con consecutivo, selector de
+  fecha de salida, despacha, recibe, conductor, documento, placa, destino, observaciones e
+  **"Información de la carga"** (naturaleza, código UN, designación de mercancía, grupo de
+  embalaje, característica de peligrosidad, etc.) para mercancías peligrosas.
+- **Nuevo rol "Inventario"** en la app **Reciclaje Turnero**: ver stock, registrar
+  entradas y embalar material. Con su propio **PIN de sesión** en el panel de escritorio.
+
 ## [0.7.0] - 2026-07-11
 
 ### Añadido
