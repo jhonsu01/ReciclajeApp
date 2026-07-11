@@ -4,6 +4,17 @@ Todas las novedades relevantes de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.8.1] - 2026-07-11
+
+### Corregido
+
+- El **PIN de sesión del rol Inventario** ahora también aparece en la barra superior del
+  panel (antes solo se veía dentro de Configuración).
+- El **stock del inventario se actualiza en tiempo real** al registrar un pesaje (el panel
+  ya no requiere reiniciarse): el servidor emite el evento de inventario tras cada pesaje.
+- **Segunda confirmación** al generar una salida ("¿Generar y descontar N kg? No se puede
+  editar ni deshacer"), para evitar despachos por error.
+
 ## [0.8.0] - 2026-07-11
 
 ### Añadido
