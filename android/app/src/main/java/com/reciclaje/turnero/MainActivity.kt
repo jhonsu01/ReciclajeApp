@@ -96,6 +96,16 @@ class MainActivity : AppCompatActivity() {
             findViewById<Button>(R.id.btnCambiarServidor).text = "Cambiar servidor"
         }
 
+        // Apoyo (Ko-fi): solo en la app completa (no en cliente ni en kiosko)
+        if (!BuildConfig.CLIENTE_APP && !BuildConfig.KIOSKO_APP) {
+            findViewById<View>(R.id.seccionApoyo).visibility = View.VISIBLE
+            val abrirKofi = View.OnClickListener { abrirUrl("https://ko-fi.com/V7V81LV7GX") }
+            findViewById<Button>(R.id.btnKofi).setOnClickListener(abrirKofi)
+            findViewById<TextView>(R.id.txtRepo).setOnClickListener {
+                abrirUrl("https://github.com/jhonsu01/ReciclajeApp")
+            }
+        }
+
         restaurarSesion()
     }
 
@@ -879,6 +889,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun formato(n: Long): String = String.format("%,d", n).replace(',', '.')
+
+    private fun abrirUrl(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        } catch (e: Exception) {
+            toast("Instala un navegador para abrir: $url")
+        }
+    }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }

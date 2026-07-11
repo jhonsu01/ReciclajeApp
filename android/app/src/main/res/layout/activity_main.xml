@@ -83,6 +83,48 @@
                 android:backgroundTint="@color/panel"
                 android:textColor="@color/texto"
                 android:text="@string/rol_kiosko" />
+
+            <!-- Apoyo (Ko-fi) — solo visible en la app completa (Reciclaje Turnero) -->
+            <LinearLayout
+                android:id="@+id/seccionApoyo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center_horizontal"
+                android:layout_marginTop="28dp"
+                android:visibility="gone">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/panel"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="¿Te resulta útil este proyecto?"
+                    android:textColor="@color/gris"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/btnKofi"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="@color/verde"
+                    android:textColor="@color/fondo"
+                    android:text="☕ Apóyanos en Ko-fi" />
+
+                <TextView
+                    android:id="@+id/txtRepo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="github.com/jhonsu01/ReciclajeApp"
+                    android:textColor="@color/gris"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- ============ VISTA 1: CONEXIÓN ============ -->
