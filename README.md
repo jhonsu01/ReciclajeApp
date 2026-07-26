@@ -1,4 +1,8 @@
-# ♻ Reciclaje Turnero
+# ♻ Reciclaje App 📱🖥️
+
+<div align="center">
+  <img src="./assets/banner.png" alt="ReciclajeApp  Banner" width="100%" />
+  </div>
 
 Sistema de gestión de reciclaje con turnero inteligente, **offline-first** y de red local:
 
